@@ -133,9 +133,13 @@ Adding a language is deliberately simple and compiler-checked:
 
 ## Roadmap
 
-- Windows backend (the trait structure is ready for it)
+See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones.
+In short, next up:
+
+- **PDF + DOCX export** (milestone 0.2)
+- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
 - More languages (PRs welcome — see `src/i18n.rs`)
-- Pause/resume, click filtering, PDF export
+- Pause/resume, click filtering, redaction
 
 ## License
 
