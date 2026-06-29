@@ -68,12 +68,13 @@ fn device_loop(path: String, mut device: evdev::Device, tx: Sender<Click>) {
         };
         for ev in events {
             // Only button press (value == 1), not release/repeat.
-            if ev.event_type() == evdev::EventType::KEY && ev.value() == 1 {
-                if let Some(button) = Button::from_evdev_code(ev.code()) {
-                    // Receiver gone = recording finished; exit cleanly.
-                    if tx.send(Click { button }).is_err() {
-                        return;
-                    }
+            if ev.event_type() == evdev::EventType::KEY
+                && ev.value() == 1
+                && let Some(button) = Button::from_evdev_code(ev.code())
+            {
+                // Receiver gone = recording finished; exit cleanly.
+                if tx.send(Click { button }).is_err() {
+                    return;
                 }
             }
         }

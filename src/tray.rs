@@ -7,9 +7,9 @@
 use crate::icon;
 use ksni::menu::StandardItem;
 use ksni::{MenuItem, Tray};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
-use std::sync::Arc;
 
 /// Control commands from the tray to the main loop.
 #[derive(Debug, Clone, Copy)]
@@ -58,7 +58,10 @@ impl Tray for StepshotTray {
         let rec = self.recording.load(Ordering::SeqCst);
 
         let header = if rec {
-            format!("● Recording — {} step(s)", self.steps.load(Ordering::SeqCst))
+            format!(
+                "● Recording — {} step(s)",
+                self.steps.load(Ordering::SeqCst)
+            )
         } else {
             "stepshot — ready".to_string()
         };

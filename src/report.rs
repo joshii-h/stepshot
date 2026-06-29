@@ -13,8 +13,11 @@ use std::path::Path;
 
 /// Live variant (file references) — after each step.
 pub fn write_reports(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
-    fs::write(dir.join("report.html"), render_html(steps, started, dir, false))
-        .context("could not write report.html")?;
+    fs::write(
+        dir.join("report.html"),
+        render_html(steps, started, dir, false),
+    )
+    .context("could not write report.html")?;
     fs::write(dir.join("report.md"), render_markdown(steps, started))
         .context("could not write report.md")?;
     Ok(())
@@ -22,8 +25,11 @@ pub fn write_reports(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
 
 /// Final variant (images embedded) — when recording stops.
 pub fn write_final(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
-    fs::write(dir.join("report.html"), render_html(steps, started, dir, true))
-        .context("could not write report.html (final)")?;
+    fs::write(
+        dir.join("report.html"),
+        render_html(steps, started, dir, true),
+    )
+    .context("could not write report.html (final)")?;
     fs::write(dir.join("report.md"), render_markdown(steps, started))
         .context("could not write report.md")?;
     Ok(())
@@ -122,8 +128,16 @@ fn base64(data: &[u8]) -> String {
         let n = (b0 << 16) | (b1 << 8) | b2;
         out.push(T[(n >> 18 & 63) as usize] as char);
         out.push(T[(n >> 12 & 63) as usize] as char);
-        out.push(if chunk.len() > 1 { T[(n >> 6 & 63) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { T[(n & 63) as usize] as char } else { '=' });
+        out.push(if chunk.len() > 1 {
+            T[(n >> 6 & 63) as usize] as char
+        } else {
+            '='
+        });
+        out.push(if chunk.len() > 2 {
+            T[(n & 63) as usize] as char
+        } else {
+            '='
+        });
     }
     out
 }

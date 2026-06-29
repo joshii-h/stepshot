@@ -65,6 +65,7 @@ fn draw(recording: bool, n: u32) -> RgbaImage {
 }
 
 /// Filled rounded rectangle (coordinates in the 48-unit grid).
+#[allow(clippy::too_many_arguments)]
 fn rrect(img: &mut RgbaImage, x: f32, y: f32, w: f32, h: f32, r: f32, color: [u8; 3], f: f32) {
     let (x0, y0, x1, y1) = (x * f, y * f, (x + w) * f, (y + h) * f);
     let r = r * f;

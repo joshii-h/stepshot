@@ -96,8 +96,7 @@ impl WindowCapturer for KdeCapturer {
             .context("could not decode raw image")?;
 
         // ScreenShot2 reports the windowId (UUID); we use it to get the title.
-        let window_title = get_string(&results, "windowId")
-            .and_then(|id| self.window_caption(&id));
+        let window_title = get_string(&results, "windowId").and_then(|id| self.window_caption(&id));
 
         let scale = get_f64(&results, "scale").unwrap_or(1.0);
 
@@ -137,9 +136,21 @@ impl KdeCapturer {
 /// KWin usually delivers QImage::Format_ARGB32_Premultiplied (6): in memory,
 /// little-endian, that is B,G,R,A with premultiplied alpha. We swap B/R and undo
 /// the premultiplication so shadows/rounded corners stay clean.
-fn decode_qimage(raw: &[u8], width: u32, height: u32, stride: usize, format: i64) -> Result<RgbaImage> {
-    anyhow::ensure!(width > 0 && height > 0, "invalid image size {width}x{height}");
-    anyhow::ensure!(stride >= width as usize * 4, "stride {stride} smaller than row width");
+fn decode_qimage(
+    raw: &[u8],
+    width: u32,
+    height: u32,
+    stride: usize,
+    format: i64,
+) -> Result<RgbaImage> {
+    anyhow::ensure!(
+        width > 0 && height > 0,
+        "invalid image size {width}x{height}"
+    );
+    anyhow::ensure!(
+        stride >= width as usize * 4,
+        "stride {stride} smaller than row width"
+    );
     anyhow::ensure!(
         raw.len() >= stride * height as usize,
         "not enough image data: {} < {}",

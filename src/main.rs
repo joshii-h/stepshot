@@ -25,9 +25,9 @@ use input::{ClickSource, EvdevClickSource};
 use ksni::blocking::TrayMethods;
 use model::{Button, Step};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
-use std::sync::Arc;
 use std::time::Duration;
 use tray::{Cmd, StepshotTray};
 
@@ -89,7 +89,10 @@ fn main() -> Result<()> {
         while let Ok(cmd) = cmd_rx.try_recv() {
             match cmd {
                 Cmd::Start if session.is_none() => {
-                    let dir = base.join(format!("session-{}", Local::now().format("%Y-%m-%d_%H-%M-%S")));
+                    let dir = base.join(format!(
+                        "session-{}",
+                        Local::now().format("%Y-%m-%d_%H-%M-%S")
+                    ));
                     if let Err(e) = std::fs::create_dir_all(&dir) {
                         eprintln!("[stepshot] session folder: {e}");
                         continue;
@@ -121,7 +124,10 @@ fn main() -> Result<()> {
                         recording.store(false, Ordering::SeqCst);
                         handle.update(|_| {});
                         if let Some(c) = &notify_conn {
-                            let msg = format!("Recording stopped — {} step(s). Report saved.", s.steps.len());
+                            let msg = format!(
+                                "Recording stopped — {} step(s). Report saved.",
+                                s.steps.len()
+                            );
                             notify::notify(c, "stepshot", &msg, "stepshot");
                         }
                     }
@@ -197,9 +203,7 @@ fn capture_step(
 ) -> Result<Step> {
     let ci = cursor.as_ref().and_then(|c| c.fetch());
 
-    let mut cap = capturer
-        .capture_active_window()
-        .context("capture failed")?;
+    let mut cap = capturer.capture_active_window().context("capture failed")?;
 
     let element = match (atspi.as_ref(), ci) {
         (Some(a), Some(c)) => a.element_at(c.x, c.y).map(|e| e.describe()),
@@ -237,8 +241,12 @@ fn run_test_modes(
     atspi: &mut Option<Atspi>,
 ) -> Result<bool> {
     if std::env::var_os("STEPSHOT_ICON").is_some() {
-        icon::debug_png(false, 128).save("/tmp/stepshot-icon-idle.png").ok();
-        icon::debug_png(true, 128).save("/tmp/stepshot-icon-rec.png").ok();
+        icon::debug_png(false, 128)
+            .save("/tmp/stepshot-icon-idle.png")
+            .ok();
+        icon::debug_png(true, 128)
+            .save("/tmp/stepshot-icon-rec.png")
+            .ok();
         println!("Icons → /tmp/stepshot-icon-idle.png, /tmp/stepshot-icon-rec.png");
         return Ok(true);
     }
@@ -246,7 +254,10 @@ fn run_test_modes(
         if let Some(a) = atspi.as_mut() {
             a.enable();
             std::thread::sleep(Duration::from_millis(1500));
-            let depth = std::env::var("STEPSHOT_ATTREE").ok().and_then(|s| s.parse().ok()).unwrap_or(3);
+            let depth = std::env::var("STEPSHOT_ATTREE")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(3);
             a.debug_dump(depth);
             a.restore();
         }
@@ -259,7 +270,10 @@ fn run_test_modes(
             match a.debug_first_button() {
                 Some((name, cx, cy)) => {
                     println!("button “{name}” @ ({cx},{cy})");
-                    println!("element_at → {:?}", a.element_at(cx, cy).map(|e| e.describe()));
+                    println!(
+                        "element_at → {:?}",
+                        a.element_at(cx, cy).map(|e| e.describe())
+                    );
                 }
                 None => println!("no named button found."),
             }
@@ -288,10 +302,10 @@ fn run_test_modes(
 
 /// Base folder for sessions: optional CLI argument, otherwise ~/Pictures/stepshot.
 fn output_base() -> Result<PathBuf> {
-    if let Some(arg) = std::env::args().nth(1) {
-        if !arg.starts_with('-') {
-            return Ok(PathBuf::from(arg));
-        }
+    if let Some(arg) = std::env::args().nth(1)
+        && !arg.starts_with('-')
+    {
+        return Ok(PathBuf::from(arg));
     }
     let home = std::env::var_os("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join("Pictures").join("stepshot"))

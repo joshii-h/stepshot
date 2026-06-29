@@ -78,7 +78,8 @@ impl KwinCursor {
             .build()
             .context("could not start cursor sink")?;
 
-        let script_path = std::env::temp_dir().join(format!("stepshot-cursor-{}.js", std::process::id()));
+        let script_path =
+            std::env::temp_dir().join(format!("stepshot-cursor-{}.js", std::process::id()));
         std::fs::write(&script_path, KWIN_SCRIPT).context("could not write KWin script")?;
 
         Ok(Self {
@@ -126,10 +127,9 @@ impl KwinCursor {
             Some("org.kde.kwin.Script"),
             "run",
             &(),
-        ) {
-            if debug {
-                eprintln!("[stepshot] run error: {e}");
-            }
+        ) && debug
+        {
+            eprintln!("[stepshot] run error: {e}");
         }
 
         let info = self.rx.recv_timeout(Duration::from_millis(500)).ok();

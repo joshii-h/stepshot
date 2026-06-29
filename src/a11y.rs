@@ -283,12 +283,12 @@ impl Probe {
         }
         if self.role_name(r).contains("button") {
             let name = self.name(r);
-            if !name.is_empty() {
-                if let Some((x, y, w, h)) = self.extents(r) {
-                    if w > 0 && h > 0 {
-                        return Some((name, x + w / 2, y + h / 2));
-                    }
-                }
+            if !name.is_empty()
+                && let Some((x, y, w, h)) = self.extents(r)
+                && w > 0
+                && h > 0
+            {
+                return Some((name, x + w / 2, y + h / 2));
             }
         }
         for ch in self.children(r) {
@@ -305,7 +305,13 @@ impl Probe {
         }
         let role = self.role_name(r);
         let name = self.name(r);
-        println!("{}[{}] “{}”  ({})", "  ".repeat(depth as usize), role, name, r.0);
+        println!(
+            "{}[{}] “{}”  ({})",
+            "  ".repeat(depth as usize),
+            role,
+            name,
+            r.0
+        );
         for ch in self.children(r) {
             self.dump(&ch, depth + 1, max_depth);
         }

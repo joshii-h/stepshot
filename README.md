@@ -72,6 +72,27 @@ has an associated `.desktop` file declaring
 resolved executable path against `Exec=`). `install.sh` sets this up — which is
 why it **copies** the binary instead of symlinking it.
 
+## Permissions & privacy
+
+stepshot is deliberately privileged and shows **no Wayland permission prompt** —
+not even on first run — because it bypasses the sanctioned (prompting) paths:
+
+- **Screenshots** go straight to KWin's privileged `org.kde.KWin.ScreenShot2`
+  D-Bus interface instead of the `xdg-desktop-portal` screen-share picker (the
+  "remember this choice" popup you may know from browsers/OBS). KWin authorizes
+  the call **statically** via the install-time `.desktop` declaration above and
+  checks it silently on every call — the same way Spectacle captures without
+  nagging. There is no runtime consent dialog.
+- **Global clicks** are read directly from `/dev/input` (evdev), which sits
+  *below* Wayland's input isolation entirely — Wayland has no global input API to
+  prompt for. The only gate is OS-level `input` group membership.
+
+So while it runs, stepshot can see every click and silently screenshot any
+window — the same capabilities a keylogger or screen recorder would need. In
+exchange it is **local-only** (no network), writes solely to the session folder,
+and toggles accessibility (AT-SPI) **only while recording**. Still: only run
+builds you trust, and remove the `.desktop` file to revoke screenshot access.
+
 ## Architecture
 
 ```
