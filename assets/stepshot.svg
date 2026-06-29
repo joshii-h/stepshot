@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <!-- stepshot: camera with a red record dot -->
+  <!-- viewfinder / flash bump -->
+  <rect x="13" y="9" width="11" height="7" rx="2" fill="#34465f"/>
+  <!-- camera body -->
+  <rect x="3" y="14" width="42" height="28" rx="5" fill="#2b3a52"/>
+  <rect x="3" y="14" width="42" height="28" rx="5" fill="none" stroke="#1c2738" stroke-width="1.5"/>
+  <!-- lens -->
+  <circle cx="23" cy="28" r="11" fill="#4a6fa5"/>
+  <circle cx="23" cy="28" r="11" fill="none" stroke="#1c2738" stroke-width="1.5"/>
+  <circle cx="23" cy="28" r="6.5" fill="#172033"/>
+  <circle cx="20" cy="25" r="2.4" fill="#cfe0f5" opacity="0.75"/>
+  <!-- red record dot -->
+  <circle cx="38.5" cy="20" r="4.2" fill="#e6231e"/>
+  <circle cx="38.5" cy="20" r="4.2" fill="none" stroke="#7d0f0c" stroke-width="0.8"/>
+</svg>

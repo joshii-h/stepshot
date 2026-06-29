@@ -1,0 +1,25 @@
+[package]
+name = "stepshot"
+version = "0.1.0-alpha.1"
+edition = "2024"
+description = "Open-source step recorder for KDE/Wayland: screenshots the clicked window, names the clicked element via AT-SPI, and writes a self-contained HTML report. Alpha."
+license = "0BSD"
+repository = "https://github.com/joshii-h/stepshot"
+readme = "README.md"
+keywords = ["screenshot", "wayland", "kde", "accessibility", "documentation"]
+categories = ["command-line-utilities"]
+
+[dependencies]
+anyhow = "1.0.103"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+ctrlc = "3.5.2"
+evdev = "0.13.2"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
+ksni = { version = "0.3.5", default-features = false, features = ["async-io", "blocking"] }
+os_pipe = "1.2.3"
+zbus = "5.16.0"
+zvariant = "5.12.0"
+
+[profile.release]
+opt-level = 3
+lto = true
