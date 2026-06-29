@@ -99,23 +99,33 @@ builds you trust, and remove the `.desktop` file to revoke screenshot access.
 
 ```
 src/
-  main.rs     tray app: event loop (start/stop/quit), sessions, incremental report
-  tray.rs     tray icon/menu (ksni, StatusNotifierItem)
-  icon.rs     camera icon drawn programmatically (red dot when active)
-  notify.rs   desktop notifications (start/stop)
-  input.rs    ClickSource trait    → EvdevClickSource (Linux)        [Win: LL mouse hook]
-  capture.rs  WindowCapturer trait → KdeCapturer (KWin ScreenShot2)  [Win: PrintWindow]
-  cursor.rs   KwinCursor: global cursor pos via a KWin script → zbus sink
-  a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
-  annotate.rs draws the click marker into the image
-  i18n.rs     minimal, dependency-free translations (English, German)
-  model.rs    Step/Button + description logic
-  report.rs   HTML + Markdown
+  main.rs        session loop + capture_step + per-OS entry points (cfg-selected)
+  platform.rs    traits (ClickSource, WindowCapturer, CursorTracker,
+                 ElementResolver) + shared types (Capture, CursorInfo, Element)
+  annotate.rs    draws the click marker into the image
+  icon.rs        camera icon drawn programmatically (red dot when active)
+  i18n.rs        minimal, dependency-free translations (English, German)
+  model.rs       Step/Button + description logic
+  report.rs      HTML + Markdown   (+ export_pdf.rs / export_docx.rs)
+
+  Linux / KDE backend (cfg target_os = linux):
+    input.rs     EvdevClickSource — /dev/input
+    capture.rs   KdeCapturer      — KWin ScreenShot2 (D-Bus, FD passing)
+    cursor.rs    KwinCursor       — global cursor via a KWin script → zbus sink
+    a11y.rs      Atspi            — GetAccessibleAtPoint (with a deadline)
+    tray.rs      ksni StatusNotifierItem ; notify.rs desktop notifications
+
+  Windows backend (cfg windows) — src/win/:
+    input.rs     WindowsClickSource — WH_MOUSE_LL low-level hook
+    capture.rs   GdiCapturer        — PrintWindow + GetDIBits
+    cursor.rs    WinCursor          — GetCursorPos + GetWindowRect
+    a11y.rs      UiaResolver        — UI Automation ElementFromPoint
+    tray.rs      Shell_NotifyIcon + popup menu + balloon notifications
 ```
 
-The platform-specific parts sit behind traits — one backend per OS, while the
-rest (`model`, `report`, `annotate`) stays shared. A Windows backend
-(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is the planned next step.
+The platform-specific parts sit behind the traits in `platform.rs` — one
+backend per OS, while the rest (`model`, `report`, `annotate`, `i18n`) stays
+shared. The Windows backend compiles in CI but is **not yet runtime-tested**.
 
 ## Languages
 

@@ -48,7 +48,7 @@ v0.1 items below are shipped in the alpha.
 | R12 | **i18n**, simple to extend (English + German) | ✅ shipped |
 | R13 | Released as **alpha**, English UI, permissive (0BSD) | ✅ shipped |
 | R14 | **Export** to PDF and Word (like comparable tools) | 🚧 milestone 0.2 |
-| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 milestone 0.3 |
+| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 implemented, testing pending |
 
 ## Platform support matrix
 
@@ -77,13 +77,16 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
 - [ ] Reports module emits HTML + Markdown + PDF + DOCX on finalize.
 
 ### 0.3 — Windows backend
-- [ ] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
-- [ ] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
-- [ ] Cursor + window geometry (`GetCursorPos`, `GetForegroundWindow`,
+Implemented behind the platform traits and compiled on `windows-latest` in CI;
+functional testing on a live Windows desktop is still pending (alpha).
+- [x] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
+- [x] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
+- [x] Cursor + window geometry (`GetCursorPos`, `GetForegroundWindow`,
       `GetWindowRect`).
-- [ ] Element names via UI Automation (`ElementFromPoint`).
-- [ ] Tray via `Shell_NotifyIcon`.
-- [ ] Cross-platform main loop selecting the backend by `cfg`.
+- [x] Element names via UI Automation (`ElementFromPoint`).
+- [x] Tray via `Shell_NotifyIcon`.
+- [x] Cross-platform main loop selecting the backend by `cfg`.
+- [ ] Live-desktop testing + polishing (icon, balloon timing, DPI).
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API).
