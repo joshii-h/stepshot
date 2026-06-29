@@ -23,6 +23,8 @@ It lives in the system tray; you start and stop recording from there.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
   and a **self-contained** `report.html` (images embedded as base64) plus `report.md`.
+- **Exports**: on stop you also get `report.pdf` (paginated, one page per step) and
+  `report.docx` (Word) with the screenshots embedded — pure-Rust, no external tools.
 
 ## Requirements
 
@@ -111,6 +113,7 @@ src/
   i18n.rs     minimal, dependency-free translations (English, German)
   model.rs    Step/Button + description logic
   report.rs   HTML + Markdown
+  export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
 ```
 
 The platform-specific parts sit behind traits — one backend per OS, while the
