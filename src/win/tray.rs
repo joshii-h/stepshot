@@ -90,7 +90,7 @@ impl Tray {
                 ..Default::default()
             };
             put_wide(&mut nid.szTip, crate::i18n::tr().tt_ready);
-            Shell_NotifyIconW(NIM_ADD, &nid);
+            let _ = Shell_NotifyIconW(NIM_ADD, &nid);
 
             Ok(Self { hwnd, nid })
         }
@@ -125,7 +125,7 @@ impl Tray {
             };
             put_wide(&mut self.nid.szTip, &tip);
             self.nid.uFlags = NIF_ICON | NIF_MESSAGE | NIF_TIP;
-            Shell_NotifyIconW(NIM_MODIFY, &self.nid);
+            let _ = Shell_NotifyIconW(NIM_MODIFY, &self.nid);
         }
     }
 
@@ -135,14 +135,14 @@ impl Tray {
             put_wide(&mut self.nid.szInfoTitle, "stepshot");
             put_wide(&mut self.nid.szInfo, body);
             self.nid.uFlags = NIF_INFO;
-            Shell_NotifyIconW(NIM_MODIFY, &self.nid);
+            let _ = Shell_NotifyIconW(NIM_MODIFY, &self.nid);
         }
     }
 
     /// Remove the icon and destroy the helper window.
     pub fn remove(&mut self) {
         unsafe {
-            Shell_NotifyIconW(NIM_DELETE, &self.nid);
+            let _ = Shell_NotifyIconW(NIM_DELETE, &self.nid);
             if !self.hwnd.is_invalid() {
                 let _ = DestroyWindow(self.hwnd);
             }

@@ -17,7 +17,7 @@ mod cursor;
 mod input;
 mod tray;
 
-use crate::platform::{CursorTracker, ElementResolver};
+use crate::platform::{ClickSource, CursorTracker, ElementResolver};
 use crate::{Session, capture_step, finalize, output_base};
 use anyhow::{Context, Result};
 use chrono::Local;
@@ -42,7 +42,7 @@ pub fn run() -> Result<()> {
 
     // Clicks arrive from the low-level hook thread.
     let (click_tx, click_rx) = mpsc::channel();
-    input::start(click_tx)?;
+    input::WindowsClickSource.start(click_tx)?;
 
     eprintln!("stepshot is running in the tray — start/stop recording from the tray icon.");
 

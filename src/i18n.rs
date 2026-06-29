@@ -39,6 +39,10 @@ impl Lang {
 }
 
 /// All user-facing strings. Templates use `{placeholders}` filled at call sites.
+///
+/// Each platform's frontend uses a different subset (e.g. the ksni tray header
+/// vs. the Windows tooltip), so not every field is read on every target.
+#[allow(dead_code)]
 pub struct Strings {
     /// BCP-47 code for the HTML `lang` attribute.
     pub html_lang: &'static str,
