@@ -13,9 +13,12 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleBitmap, CreateCompatibleDC,
     DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetDIBits, HGDIOBJ, ReleaseDC, SelectObject,
 };
-use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PW_RENDERFULLCONTENT, PrintWindow};
-use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowRect, GetWindowTextW};
+use windows::Win32::Storage::Xps::{PRINT_WINDOW_FLAGS, PrintWindow};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetForegroundWindow, GetWindowRect, GetWindowTextW, PW_RENDERFULLCONTENT,
+};
 
+#[derive(Default)]
 pub struct GdiCapturer;
 
 impl GdiCapturer {
@@ -69,7 +72,7 @@ unsafe fn capture() -> Result<Capture> {
             bmp,
             0,
             h as u32,
-            Some(buf.as_mut_ptr() as *mut _),
+            Some(buf.as_mut_ptr() as *mut core::ffi::c_void),
             &mut bmi,
             DIB_RGB_COLORS,
         )

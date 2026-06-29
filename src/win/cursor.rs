@@ -7,6 +7,7 @@ use crate::platform::{CursorInfo, CursorTracker};
 use windows::Win32::Foundation::{POINT, RECT};
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow, GetWindowRect};
 
+#[derive(Default)]
 pub struct WinCursor;
 
 impl WinCursor {
