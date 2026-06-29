@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write # required to create the GitHub Release
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    name: build & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release
+        run: cargo build --release --locked
+
+      - name: Package tarball
+        run: |
+          PKG="stepshot-${GITHUB_REF_NAME}-x86_64-linux"
+          mkdir -p "dist/${PKG}/assets"
+          cp target/release/stepshot "dist/${PKG}/"
+          cp install.sh README.md LICENSE "dist/${PKG}/"
+          cp assets/stepshot.svg "dist/${PKG}/assets/"
+          tar -C dist -czf "${PKG}.tar.gz" "${PKG}"
+          sha256sum "${PKG}.tar.gz" > "${PKG}.tar.gz.sha256"
+          echo "Packaged ${PKG}.tar.gz"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            stepshot-*.tar.gz
+            stepshot-*.tar.gz.sha256
+          generate_release_notes: true
+          prerelease: true
+          body: |
+            **Alpha** — KDE Plasma / Wayland only.
+
+            Prebuilt x86_64 (glibc) binary. Download the tarball, then:
+
+            ```sh
+            tar xzf stepshot-*.tar.gz && cd stepshot-*/
+            ./install.sh        # installs binary + icon + .desktop (no toolchain needed)
+            ```
+
+            Requirements: user in the `input` group; for Qt/KDE element names,
+            qtbase built with the `accessibility` flag. See README for details.

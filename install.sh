@@ -15,12 +15,19 @@ ICONDIR="${HOME}/.local/share/icons/hicolor/scalable/apps"
 BIN="${BINDIR}/stepshot"
 DESKTOP="${APPDIR}/org.stepshot.Stepshot.desktop"
 
-echo ">> Building release …"
-cargo build --release
+# Use the bundled prebuilt binary (release tarball) if present, else build it.
+if [ -x "./stepshot" ]; then
+    echo ">> Using bundled binary"
+    SRC="./stepshot"
+else
+    echo ">> Building release …"
+    cargo build --release
+    SRC="target/release/stepshot"
+fi
 
 echo ">> Installing binary  → ${BIN}"
 mkdir -p "${BINDIR}" "${APPDIR}" "${ICONDIR}"
-install -m755 target/release/stepshot "${BIN}"
+install -m755 "${SRC}" "${BIN}"
 
 echo ">> Installing icon    → ${ICONDIR}/stepshot.svg"
 install -m644 assets/stepshot.svg "${ICONDIR}/stepshot.svg"
