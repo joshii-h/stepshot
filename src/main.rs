@@ -9,6 +9,7 @@ mod a11y;
 mod annotate;
 mod capture;
 mod cursor;
+mod i18n;
 mod icon;
 mod input;
 mod model;
@@ -39,6 +40,8 @@ struct Session {
 }
 
 fn main() -> Result<()> {
+    i18n::init();
+
     let capturer = KdeCapturer::connect()?;
     let source = EvdevClickSource;
     let cursor = KwinCursor::new().ok();
@@ -112,7 +115,7 @@ fn main() -> Result<()> {
                     // Don't record the click on the tray menu itself.
                     while click_rx.try_recv().is_ok() {}
                     if let Some(c) = &notify_conn {
-                        notify::notify(c, "stepshot", "Recording started", "stepshot");
+                        notify::notify(c, "stepshot", i18n::tr().notify_started, "stepshot");
                     }
                 }
                 Cmd::Stop => {
@@ -124,10 +127,9 @@ fn main() -> Result<()> {
                         recording.store(false, Ordering::SeqCst);
                         handle.update(|_| {});
                         if let Some(c) = &notify_conn {
-                            let msg = format!(
-                                "Recording stopped — {} step(s). Report saved.",
-                                s.steps.len()
-                            );
+                            let msg = i18n::tr()
+                                .notify_stopped
+                                .replace("{n}", &s.steps.len().to_string());
                             notify::notify(c, "stepshot", &msg, "stepshot");
                         }
                     }

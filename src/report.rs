@@ -36,16 +36,23 @@ pub fn write_final(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
 }
 
 fn render_markdown(steps: &[Step], started: &str) -> String {
+    let t = crate::i18n::tr();
     let mut out = String::new();
-    out.push_str(&format!("# Recording\n\nStarted: {started}\n\n"));
-    out.push_str(&format!("Total steps: {}\n\n", steps.len()));
+    out.push_str(&format!(
+        "# {}\n\n{}\n\n",
+        t.report_heading,
+        t.report_started.replace("{x}", started)
+    ));
+    out.push_str(&format!(
+        "{}\n\n",
+        t.report_total.replace("{n}", &steps.len().to_string())
+    ));
     for s in steps {
+        let step_label = t.report_step.replace("{n}", &s.index.to_string());
         out.push_str(&format!(
-            "## Step {} — {}\n\n*{}*\n\n![Step {}]({})\n\n",
-            s.index,
+            "## {step_label} — {}\n\n*{}*\n\n![{step_label}]({})\n\n",
             s.time,
             s.describe(),
-            s.index,
             s.image_file
         ));
     }
@@ -54,6 +61,7 @@ fn render_markdown(steps: &[Step], started: &str) -> String {
 
 /// `embed=true` inlines the images as base64 data URIs (self-contained).
 fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String {
+    let t = crate::i18n::tr();
     let mut cards = String::new();
     for s in steps {
         let src = if embed {
@@ -69,10 +77,11 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
     <div class="head"><span class="num">{n}</span>
       <div><p class="desc">{desc}</p><p class="time">{time}</p></div>
     </div>
-    <img src="{src}" alt="Step {n}" loading="lazy">
+    <img src="{src}" alt="{alt}" loading="lazy">
   </section>
 "#,
             n = s.index,
+            alt = html_escape(&t.report_step.replace("{n}", &s.index.to_string())),
             desc = html_escape(&s.describe()),
             time = html_escape(&s.time),
             src = src,
@@ -81,11 +90,11 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
 
     format!(
         r#"<!DOCTYPE html>
-<html lang="en">
+<html lang="{html_lang}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>stepshot — recording</title>
+<title>stepshot — {heading}</title>
 <style>
   :root {{ color-scheme: light dark; }}
   body {{ font-family: system-ui, sans-serif; max-width: 980px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }}
@@ -104,15 +113,22 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
 </head>
 <body>
 <header>
-  <h1>Recording</h1>
-  <p class="meta">Started: {started} · {count} step(s){embed_note}</p>
+  <h1>{heading}</h1>
+  <p class="meta">{started_line} · {count} {steps_word}{embed_note}</p>
 </header>
 {cards}</body>
 </html>
 "#,
-        started = html_escape(started),
+        html_lang = t.html_lang,
+        heading = html_escape(t.report_heading),
+        started_line = html_escape(&t.report_started.replace("{x}", started)),
         count = steps.len(),
-        embed_note = if embed { " · self-contained" } else { "" },
+        steps_word = html_escape(t.report_steps_word),
+        embed_note = if embed {
+            format!(" · {}", html_escape(t.report_self_contained))
+        } else {
+            String::new()
+        },
         cards = cards,
     )
 }

@@ -35,7 +35,7 @@ impl Element {
             (r, n) if !r.is_empty() && !n.is_empty() => format!("{r} “{n}”"),
             (r, _) if !r.is_empty() => r.to_string(),
             (_, n) if !n.is_empty() => format!("“{n}”"),
-            _ => "element".to_string(),
+            _ => crate::i18n::tr().element_generic.to_string(),
         }
     }
 }

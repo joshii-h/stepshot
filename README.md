@@ -108,6 +108,7 @@ src/
   cursor.rs   KwinCursor: global cursor pos via a KWin script → zbus sink
   a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
   annotate.rs draws the click marker into the image
+  i18n.rs     minimal, dependency-free translations (English, German)
   model.rs    Step/Button + description logic
   report.rs   HTML + Markdown
 ```
@@ -116,10 +117,24 @@ The platform-specific parts sit behind traits — one backend per OS, while the
 rest (`model`, `report`, `annotate`) stays shared. A Windows backend
 (`SetWindowsHookEx` + `PrintWindow` + UI Automation) is the planned next step.
 
+## Languages
+
+UI, notifications and the report are localized. The language is auto-detected
+from `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` (defaults to English). Currently
+**English** and **German** ship in `src/i18n.rs`.
+
+Adding a language is deliberately simple and compiler-checked:
+
+- **a new string**: add a field to `Strings` — every language `static` is a
+  struct literal, so the compiler forces each language to provide it;
+- **a new language**: add one `static XX: Strings = …` and one match arm in
+  `strings_for`. Placeholders (`{n}`, `{title}`, …) are identical across
+  languages.
+
 ## Roadmap
 
 - Windows backend (the trait structure is ready for it)
-- Optional i18n (currently English-only)
+- More languages (PRs welcome — see `src/i18n.rs`)
 - Pause/resume, click filtering, PDF export
 
 ## License

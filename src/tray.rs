@@ -40,11 +40,13 @@ impl Tray for StepshotTray {
     }
 
     fn tool_tip(&self) -> ksni::ToolTip {
+        let t = crate::i18n::tr();
         let rec = self.recording.load(Ordering::SeqCst);
         let desc = if rec {
-            format!("Recording — {} step(s)", self.steps.load(Ordering::SeqCst))
+            t.tt_recording
+                .replace("{n}", &self.steps.load(Ordering::SeqCst).to_string())
         } else {
-            "Ready".to_string()
+            t.tt_ready.to_string()
         };
         ksni::ToolTip {
             icon_name: String::new(),
@@ -55,20 +57,19 @@ impl Tray for StepshotTray {
     }
 
     fn menu(&self) -> Vec<MenuItem<Self>> {
+        let t = crate::i18n::tr();
         let rec = self.recording.load(Ordering::SeqCst);
 
         let header = if rec {
-            format!(
-                "● Recording — {} step(s)",
-                self.steps.load(Ordering::SeqCst)
-            )
+            t.tray_recording
+                .replace("{n}", &self.steps.load(Ordering::SeqCst).to_string())
         } else {
-            "stepshot — ready".to_string()
+            t.tray_ready.to_string()
         };
 
         let toggle: MenuItem<Self> = if rec {
             StandardItem {
-                label: "Stop recording & write report".into(),
+                label: t.menu_stop.into(),
                 icon_name: "media-playback-stop".into(),
                 activate: Box::new(|t: &mut StepshotTray| {
                     let _ = t.tx.send(Cmd::Stop);
@@ -78,7 +79,7 @@ impl Tray for StepshotTray {
             .into()
         } else {
             StandardItem {
-                label: "Start recording".into(),
+                label: t.menu_start.into(),
                 icon_name: "media-record".into(),
                 activate: Box::new(|t: &mut StepshotTray| {
                     let _ = t.tx.send(Cmd::Start);
@@ -98,7 +99,7 @@ impl Tray for StepshotTray {
             MenuItem::Separator,
             toggle,
             StandardItem {
-                label: "Open last report folder".into(),
+                label: t.menu_open_folder.into(),
                 icon_name: "folder-open".into(),
                 activate: Box::new(|t: &mut StepshotTray| {
                     let _ = t.tx.send(Cmd::OpenFolder);
@@ -108,7 +109,7 @@ impl Tray for StepshotTray {
             .into(),
             MenuItem::Separator,
             StandardItem {
-                label: "Quit stepshot".into(),
+                label: t.menu_quit.into(),
                 icon_name: "application-exit".into(),
                 activate: Box::new(|t: &mut StepshotTray| {
                     let _ = t.tx.send(Cmd::Quit);

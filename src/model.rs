@@ -23,10 +23,11 @@ impl Button {
 
     /// Human-readable label used in the description.
     pub fn label(self) -> &'static str {
+        let t = crate::i18n::tr();
         match self {
-            Button::Left => "Left click",
-            Button::Right => "Right click",
-            Button::Middle => "Middle click",
+            Button::Left => t.click_left,
+            Button::Right => t.click_right,
+            Button::Middle => t.click_middle,
         }
     }
 }
@@ -62,13 +63,20 @@ pub struct Step {
 impl Step {
     /// One-line description of what happened in this step.
     pub fn describe(&self) -> String {
+        let t = crate::i18n::tr();
         let action = match &self.element {
-            Some(el) if !el.is_empty() => format!("{} on {}", self.button.label(), el),
+            Some(el) if !el.is_empty() => t
+                .action_on
+                .replace("{action}", self.button.label())
+                .replace("{element}", el),
             _ => self.button.label().to_string(),
         };
         match &self.window_title {
-            Some(title) if !title.is_empty() => format!("{action} in window “{title}”"),
-            _ => format!("{action} in the active window"),
+            Some(title) if !title.is_empty() => t
+                .in_window
+                .replace("{action}", &action)
+                .replace("{title}", title),
+            _ => t.in_active_window.replace("{action}", &action),
         }
     }
 }
