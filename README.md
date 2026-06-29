@@ -1,5 +1,7 @@
 # stepshot
 
+[![CI](https://github.com/joshii-h/stepshot/actions/workflows/rust.yml/badge.svg)](https://github.com/joshii-h/stepshot/actions/workflows/rust.yml)
+
 > ⚠️ **Alpha** — works, but rough edges and breaking changes are expected.
 > KDE Plasma / Wayland only for now.
 
