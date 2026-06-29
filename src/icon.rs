@@ -5,7 +5,8 @@
 
 use image::{Rgba, RgbaImage};
 
-/// Builds the tray icon in the required ARGB32 format.
+/// Builds the tray icon in the required ARGB32 format (ksni / StatusNotifierItem).
+#[cfg(target_os = "linux")]
 pub fn tray_icon(recording: bool) -> ksni::Icon {
     let size = 48u32;
     let img = render(recording, size);
@@ -20,8 +21,9 @@ pub fn tray_icon(recording: bool) -> ksni::Icon {
     }
 }
 
-/// Debug: rendered icon as an RGBA image (for visual inspection).
-pub fn debug_png(recording: bool, size: u32) -> RgbaImage {
+/// The rendered icon as an RGBA image — used by the Windows tray (→ `HICON`)
+/// and by the icon debug mode.
+pub fn rgba(recording: bool, size: u32) -> RgbaImage {
     render(recording, size)
 }
 

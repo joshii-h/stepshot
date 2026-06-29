@@ -7,6 +7,7 @@
 //! Important: the tree traversal runs with a hard deadline on a separate thread —
 //! a hung app (zbus timeout 25 s) must not block the recorder.
 
+use crate::platform::{Element, ElementResolver};
 use anyhow::{Context, Result};
 use std::sync::mpsc;
 use std::time::Duration;
@@ -20,25 +21,6 @@ const NULL_PATH: &str = "/org/a11y/atspi/null";
 
 /// Maximum time for an element_at query before we give up.
 const QUERY_DEADLINE: Duration = Duration::from_millis(1500);
-
-/// A detected UI element.
-#[derive(Debug, Clone)]
-pub struct Element {
-    pub name: String,
-    pub role: String,
-}
-
-impl Element {
-    /// Description like “button ‘Save’” or just “text field”.
-    pub fn describe(&self) -> String {
-        match (self.role.trim(), self.name.trim()) {
-            (r, n) if !r.is_empty() && !n.is_empty() => format!("{r} “{n}”"),
-            (r, _) if !r.is_empty() => r.to_string(),
-            (_, n) if !n.is_empty() => format!("“{n}”"),
-            _ => crate::i18n::tr().element_generic.to_string(),
-        }
-    }
-}
 
 /// A reference to an AT-SPI object (bus name + object path).
 type Ref = (String, String);
@@ -80,34 +62,6 @@ impl Atspi {
         })
     }
 
-    /// Enables AT-SPI system-wide (remembering the previous state).
-    pub fn enable(&mut self) {
-        self.prev_enabled = self.get_status_bool("IsEnabled");
-        self.set_status_bool("IsEnabled", true);
-        self.set_status_bool("ScreenReaderEnabled", true);
-    }
-
-    /// Restores the previous a11y state.
-    pub fn restore(&self) {
-        if let Some(false) = self.prev_enabled {
-            self.set_status_bool("IsEnabled", false);
-            self.set_status_bool("ScreenReaderEnabled", false);
-        }
-    }
-
-    /// Element at screen coordinate (x, y) — with a hard deadline.
-    pub fn element_at(&self, x: i32, y: i32) -> Option<Element> {
-        let bus = self.probe.bus.clone();
-        let (tx, rx) = mpsc::channel();
-        // Worker thread: if it blocks on a hung app, we still give up after the
-        // deadline (the thread keeps running in the background).
-        std::thread::spawn(move || {
-            let probe = Probe { bus };
-            let _ = tx.send(probe.element_at_inner(x, y));
-        });
-        rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
-    }
-
     /// Debug: print the tree (name + role) up to `max_depth`.
     pub fn debug_dump(&self, max_depth: u32) {
         let root = (REGISTRY.to_string(), ROOT_PATH.to_string());
@@ -147,6 +101,36 @@ impl Atspi {
             "Set",
             &("org.a11y.Status", prop, &variant),
         );
+    }
+}
+
+impl ElementResolver for Atspi {
+    /// Enables AT-SPI system-wide (remembering the previous state).
+    fn enable(&mut self) {
+        self.prev_enabled = self.get_status_bool("IsEnabled");
+        self.set_status_bool("IsEnabled", true);
+        self.set_status_bool("ScreenReaderEnabled", true);
+    }
+
+    /// Restores the previous a11y state.
+    fn restore(&self) {
+        if let Some(false) = self.prev_enabled {
+            self.set_status_bool("IsEnabled", false);
+            self.set_status_bool("ScreenReaderEnabled", false);
+        }
+    }
+
+    /// Element at screen coordinate (x, y) — with a hard deadline.
+    fn element_at(&self, x: i32, y: i32) -> Option<Element> {
+        let bus = self.probe.bus.clone();
+        let (tx, rx) = mpsc::channel();
+        // Worker thread: if it blocks on a hung app, we still give up after the
+        // deadline (the thread keeps running in the background).
+        std::thread::spawn(move || {
+            let probe = Probe { bus };
+            let _ = tx.send(probe.element_at_inner(x, y));
+        });
+        rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
     }
 }
 

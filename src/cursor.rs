@@ -5,23 +5,13 @@
 //! (`org.stepshot.Sink`) and, on each click, run a KWin script that reports
 //! `workspace.cursorPos` and the window geometry back to us via `callDBus`.
 
+use crate::platform::{CursorInfo, CursorTracker};
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use zbus::interface;
-
-/// Global cursor position and frame rect of the active window (screen coords).
-#[derive(Debug, Clone, Copy)]
-pub struct CursorInfo {
-    pub x: i32,
-    pub y: i32,
-    pub frame_x: i32,
-    pub frame_y: i32,
-    pub frame_w: i32,
-    pub frame_h: i32,
-}
 
 /// D-Bus sink that the KWin script calls into.
 struct Sink {
@@ -89,9 +79,11 @@ impl KwinCursor {
             counter: AtomicI32::new(0),
         })
     }
+}
 
+impl CursorTracker for KwinCursor {
     /// Loads + runs the KWin script and briefly waits for the callback.
-    pub fn fetch(&self) -> Option<CursorInfo> {
+    fn fetch(&self) -> Option<CursorInfo> {
         // Discard stale values.
         while self.rx.try_recv().is_ok() {}
 

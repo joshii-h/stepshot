@@ -8,15 +8,10 @@
 //! (low-level mouse hook) simply implements the same trait.
 
 use crate::model::{Button, Click};
+use crate::platform::ClickSource;
 use anyhow::{Context, Result};
 use std::sync::mpsc::Sender;
 use std::thread;
-
-/// A source of global clicks. Reports every button press over the channel.
-pub trait ClickSource {
-    /// Starts capturing. Clicks are delivered asynchronously over `tx`.
-    fn start(&self, tx: Sender<Click>) -> Result<()>;
-}
 
 /// evdev-based backend for Linux (Wayland & X11).
 pub struct EvdevClickSource;

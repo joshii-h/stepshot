@@ -7,25 +7,13 @@
 //! The `WindowCapturer` trait abstracts the platform; a Windows backend
 //! (`PrintWindow`) implements the same trait later.
 
+use crate::platform::{Capture, WindowCapturer};
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::fd::AsFd;
 use zvariant::{Fd, OwnedValue, Value};
-
-/// A captured window image plus optional context.
-pub struct Capture {
-    pub image: RgbaImage,
-    pub window_title: Option<String>,
-    /// Scale factor (HiDPI): image pixels = logical coords * scale.
-    pub scale: f64,
-}
-
-/// Backend that photographs the currently active window.
-pub trait WindowCapturer {
-    fn capture_active_window(&self) -> Result<Capture>;
-}
 
 /// KWin ScreenShot2 backend (KDE Plasma, Wayland & X11).
 pub struct KdeCapturer {

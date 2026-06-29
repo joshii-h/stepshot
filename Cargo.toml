@@ -9,16 +9,35 @@ readme = "README.md"
 keywords = ["screenshot", "wayland", "kde", "accessibility", "documentation"]
 categories = ["command-line-utilities"]
 
+# Cross-platform dependencies.
 [dependencies]
 anyhow = "1.0.103"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 ctrlc = "3.5.2"
-evdev = "0.13.2"
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+# Linux / KDE backend (evdev clicks, KWin D-Bus, AT-SPI, StatusNotifierItem tray).
+[target.'cfg(target_os = "linux")'.dependencies]
+evdev = "0.13.2"
 ksni = { version = "0.3.5", default-features = false, features = ["async-io", "blocking"] }
 os_pipe = "1.2.3"
 zbus = "5.16.0"
 zvariant = "5.12.0"
+
+# Windows backend (low-level mouse hook, PrintWindow, UI Automation, tray).
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Storage_Xps",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_UI_Accessibility",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+] }
 
 [profile.release]
 opt-level = 3

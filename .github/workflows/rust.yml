@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/**"]
   pull_request:
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    name: fmt · clippy · build · test
+  linux:
+    name: linux · fmt · clippy · build · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,6 +35,28 @@ jobs:
       - name: Test
         run: cargo test --locked
 
-# Note: GitHub runners have no KWin/Wayland/AT-SPI, so the runtime behavior
-# (screenshots, element detection, tray) can only be verified locally.
-# This workflow covers formatting, lints, and that everything compiles.
+  windows:
+    name: windows · clippy · build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo build
+        uses: Swatinem/rust-cache@v2
+
+      # Compiles the cfg(windows) backend (hook / PrintWindow / UIA / tray).
+      - name: Clippy (deny warnings)
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Build
+        run: cargo build --release --locked
+
+# Note: GitHub runners have no KWin/Wayland/AT-SPI (Linux) nor a desktop session
+# wired for the tray (Windows), so runtime behavior — screenshots, element
+# detection, tray — can only be verified locally. CI covers formatting, lints,
+# and that every backend compiles on its target OS.
