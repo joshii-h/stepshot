@@ -112,7 +112,9 @@ builds you trust, and remove the `.desktop` file to revoke screenshot access.
 
 ```
 src/
-  main.rs     tray app: event loop (start/stop/quit), sessions, incremental report
+  main.rs     startup + tray event loop (start/stop/quit), wiring
+  session.rs  recording session: per-click capture step + final report
+  selftest.rs env-driven debug/self-test modes (ONESHOT, ICON, ATTREE, ATDUMP)
   tray.rs     tray icon/menu (ksni, StatusNotifierItem)
   icon.rs     camera icon drawn programmatically (red dot when active)
   notify.rs   desktop notifications (start/stop)
