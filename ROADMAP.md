@@ -95,8 +95,8 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see
-  [#1](https://github.com/joshii-h/stepshot/issues/1); the maintainer has no
-  current-macOS Mac to develop/test on, so this needs an external contributor.
+  [#1](https://github.com/joshii-h/stepshot/issues/1); I don't have a Mac running
+  a current macOS to develop/test on, so this needs an external contributor.
 - GNOME backend (portal screenshot, AT-SPI already shared).
 - Pause/resume, click filtering, keyboard-step capture.
 - Redaction / blur of sensitive regions before export.

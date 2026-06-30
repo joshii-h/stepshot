@@ -158,7 +158,7 @@ export shipped in 0.2; in short, next up:
 
 - **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
-  the maintainer has no current-macOS Mac, so this needs an external contributor
+  I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)
 - Pause/resume, click filtering, redaction
 
