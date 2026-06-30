@@ -152,12 +152,14 @@ Adding a language is deliberately simple and compiler-checked:
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones.
-In short, next up:
+See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones,
+or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOCX
+export shipped in 0.2; in short, next up:
 
-- **PDF + DOCX export** (milestone 0.2)
 - **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
-- More languages (PRs welcome — see `src/i18n.rs`)
+- **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
+  the maintainer has no current-macOS Mac, so this needs an external contributor
+- More languages (PRs welcome — add a file under `src/i18n/`)
 - Pause/resume, click filtering, redaction
 
 ## License
