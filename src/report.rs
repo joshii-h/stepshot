@@ -23,7 +23,10 @@ pub fn write_reports(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
     Ok(())
 }
 
-/// Final variant (images embedded) — when recording stops.
+/// Final variant — when recording stops. Writes the self-contained HTML and
+/// Markdown, then (best effort) the PDF and DOCX exports. A failing export does
+/// not lose the report: HTML/Markdown are written first and their errors are the
+/// only ones propagated; PDF/DOCX failures are logged and swallowed.
 pub fn write_final(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
     fs::write(
         dir.join("report.html"),
@@ -32,6 +35,13 @@ pub fn write_final(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
     .context("could not write report.html (final)")?;
     fs::write(dir.join("report.md"), render_markdown(steps, started))
         .context("could not write report.md")?;
+
+    if let Err(e) = crate::export_pdf::write(dir, steps, started) {
+        eprintln!("[stepshot] PDF export failed: {e:#}");
+    }
+    if let Err(e) = crate::export_docx::write(dir, steps, started) {
+        eprintln!("[stepshot] DOCX export failed: {e:#}");
+    }
     Ok(())
 }
 

@@ -9,6 +9,8 @@ mod a11y;
 mod annotate;
 mod capture;
 mod cursor;
+mod export_docx;
+mod export_pdf;
 mod i18n;
 mod icon;
 mod input;
