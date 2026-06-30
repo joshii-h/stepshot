@@ -59,8 +59,13 @@ echo "It shows up as a camera icon in the system tray — start/stop recording t
 if ! id -nG | tr ' ' '\n' | grep -qx input; then
     echo ""
     echo ">> NOTE: you are not in the 'input' group — click capture won't work yet."
-    echo "   Run this once, then log out and back in:"
+    echo "   Run this once, then REBOOT:"
     echo ""
     echo "       sudo usermod -aG input \"\$USER\""
+    echo ""
+    echo "   A reboot is required, not just a re-login: the systemd --user manager"
+    echo "   (which launches your tray apps) keeps its old groups across logout, so"
+    echo "   menu-launched stepshot would still see no input device. A reboot — or"
+    echo "   'loginctl terminate-user \$USER' — restarts it with the new group."
     echo ""
 fi
