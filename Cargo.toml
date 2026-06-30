@@ -1,8 +1,8 @@
 [package]
 name = "stepshot"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 edition = "2024"
-description = "Open-source step recorder for KDE/Wayland: screenshots the clicked window, names the clicked element via AT-SPI, and writes a self-contained HTML report. Alpha."
+description = "Open-source step recorder for KDE/Wayland: screenshots the clicked window, names the clicked element via AT-SPI, and writes a self-contained HTML report plus PDF and DOCX. Alpha."
 license = "0BSD"
 repository = "https://github.com/joshii-h/stepshot"
 readme = "README.md"
