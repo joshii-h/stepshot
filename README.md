@@ -29,7 +29,7 @@ It lives in the system tray; you start and stop recording from there.
 | Purpose | Requirement |
 |---------|-------------|
 | Screenshot authorization | a `.desktop` file with `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (created by `install.sh`) |
-| Click capture | user in the `input` group — `sudo usermod -aG input "$USER"`, then log out and back in |
+| Click capture | user in the `input` group — `sudo usermod -aG input "$USER"`, then **reboot** (see note below) |
 | Element detection (Qt/KDE) | **qtbase built with the `accessibility` USE flag** (Gentoo) / the Qt AT-SPI bridge |
 | Element detection (GTK) | `at-spi2-atk` / `libatk-bridge` (usually present) |
 | Element detection (Firefox) | activates automatically once an AT is detected |
@@ -74,13 +74,16 @@ has an associated `.desktop` file declaring
 resolved executable path against `Exec=`). `install.sh` sets this up — which is
 why it **copies** the binary instead of symlinking it.
 
-> **`NoAuthorized` after joining the `input` group?** KWin reads the caller's
-> `/proc/<pid>/exe` to find its `.desktop`. If you start stepshot through
-> `newgrp input` / `sg input` instead of re-logging in, the gid switch makes the
-> process *non-dumpable* (e.g. Fedora's `suid_dumpable=2`), so that link is
-> root-owned and unreadable — KWin then refuses the screenshot. **Log out and
-> back in** (a normal login puts `input` in your groups without this side effect)
-> rather than using `newgrp`.
+> **Just joined the `input` group? Reboot — don't just re-log in.** On systemd
+> systems a logout/login does *not* restart the per-user `systemd --user` manager,
+> which launches your tray apps and keeps its *old* group set. So menu-launched
+> stepshot still sees no input device (tray shows, but every recording yields 0
+> steps). A full reboot — or `loginctl terminate-user "$USER"` — fixes it.
+>
+> Tempted to shortcut with `newgrp input` / `sg input`? Don't: the gid switch
+> makes the process *non-dumpable* (e.g. Fedora's `suid_dumpable=2`), so KWin
+> can't read its `/proc/<pid>/exe` to find the `.desktop` and refuses the
+> screenshot with `NoAuthorized`. Reboot instead.
 
 ## Permissions & privacy
 
@@ -116,7 +119,8 @@ src/
   cursor.rs   KwinCursor: global cursor pos via a KWin script → zbus sink
   a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
   annotate.rs draws the click marker into the image
-  i18n.rs     minimal, dependency-free translations (English, German)
+  i18n.rs     minimal, dependency-free translations (one file per language)
+  i18n/       en.rs, de.rs — string tables (add a language by adding a file)
   model.rs    Step/Button + description logic
   report.rs   HTML + Markdown
 ```
@@ -129,15 +133,17 @@ rest (`model`, `report`, `annotate`) stays shared. A Windows backend
 
 UI, notifications and the report are localized. The language is auto-detected
 from `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` (defaults to English). Currently
-**English** and **German** ship in `src/i18n.rs`.
+**English** (`src/i18n/en.rs`) and **German** (`src/i18n/de.rs`) ship; each
+language is its own file, so adding one is a self-contained PR.
 
 Adding a language is deliberately simple and compiler-checked:
 
-- **a new string**: add a field to `Strings` — every language `static` is a
-  struct literal, so the compiler forces each language to provide it;
-- **a new language**: add one `static XX: Strings = …` and one match arm in
-  `strings_for`. Placeholders (`{n}`, `{title}`, …) are identical across
-  languages.
+- **a new string**: add a field to `Strings` (in `src/i18n.rs`) — every language
+  file is a struct literal, so the compiler forces each language to provide it;
+- **a new language**: add `src/i18n/xx.rs` with `pub static STRINGS: Strings =
+  …`, then register it in `src/i18n.rs` (`mod xx;`, a `Lang` variant, a
+  `strings_for` arm, and its locale prefix in `Lang::detect`). Placeholders
+  (`{n}`, `{title}`, …) are identical across languages.
 
 ## Roadmap
 
