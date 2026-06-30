@@ -66,12 +66,21 @@ fn main() -> Result<()> {
     .spawn()
     .context("could not create tray icon (is a StatusNotifierWatcher / KDE panel running?)")?;
 
-    // Click source.
-    let (click_tx, click_rx) = mpsc::channel();
-    source.start(click_tx)?;
-
     // Connection for notifications.
     let notify_conn = zbus::blocking::Connection::session().ok();
+
+    // Click source. If it can't start (typically: user not in the `input` group),
+    // we keep the tray alive and notify instead of exiting — otherwise the app
+    // would vanish with no window and no icon, looking like a broken tray.
+    // `keepalive_tx` holds the channel open so the main loop never sees a
+    // disconnect even when no device thread owns a sender.
+    let (keepalive_tx, click_rx) = mpsc::channel();
+    if let Err(e) = source.start(keepalive_tx.clone()) {
+        eprintln!("[stepshot] click capture unavailable: {e:#}");
+        if let Some(c) = &notify_conn {
+            notify::notify(c, "stepshot", i18n::tr().notify_no_input, "stepshot");
+        }
+    }
 
     // Ctrl+C also quits the app (fallback).
     {

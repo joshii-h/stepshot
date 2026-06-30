@@ -67,6 +67,7 @@ pub struct Strings {
     // Notifications.
     pub notify_started: &'static str,
     pub notify_stopped: &'static str, // "Recording stopped — {n} step(s). Report saved."
+    pub notify_no_input: &'static str, // click capture unavailable (input group?)
 
     // Report.
     pub report_heading: &'static str,
@@ -96,6 +97,7 @@ static EN: Strings = Strings {
     menu_quit: "Quit stepshot",
     notify_started: "Recording started",
     notify_stopped: "Recording stopped — {n} step(s). Report saved.",
+    notify_no_input: "No input device — click capture is off. Add yourself to the “input” group and log back in.",
     report_heading: "Recording",
     report_started: "Started: {x}",
     report_total: "Total steps: {n}",
@@ -123,6 +125,7 @@ static DE: Strings = Strings {
     menu_quit: "stepshot beenden",
     notify_started: "Aufnahme gestartet",
     notify_stopped: "Aufnahme beendet — {n} Schritt(e). Bericht gespeichert.",
+    notify_no_input: "Kein Eingabegerät — Klick-Erfassung ist aus. Trag dich in die Gruppe „input“ ein und melde dich neu an.",
     report_heading: "Aufzeichnung",
     report_started: "Gestartet: {x}",
     report_total: "Schritte gesamt: {n}",
