@@ -1,15 +1,22 @@
 //! Minimal, dependency-free internationalization.
 //!
 //! Design goals: trivially extensible, no runtime deps, compile-time complete.
+//! Each language lives in its own file (`i18n/<code>.rs`) so adding one is a
+//! self-contained PR that touches no other language.
 //!
-//! - **Add a string:** add a field to [`Strings`]. Every language `static` is a
+//! - **Add a string:** add a field to [`Strings`]. Every language file is a
 //!   struct literal, so the compiler then forces *every* language to provide it.
-//! - **Add a language:** add a `static XX: Strings = Strings { … }` and one arm
-//!   in [`strings_for`]. Placeholders (`{n}`, `{title}`, `{action}`, `{element}`,
+//! - **Add a language:** create `i18n/xx.rs` with `pub static STRINGS: Strings
+//!   = Strings { … };`, then register it here — declare `mod xx;`, add an `Xx`
+//!   variant to [`Lang`], map it in [`strings_for`], and add its locale prefix to
+//!   [`Lang::detect`]. Placeholders (`{n}`, `{title}`, `{action}`, `{element}`,
 //!   `{x}`) are identical across languages and filled at the call site via
 //!   `str::replace`.
 //!
 //! The active language is detected once via [`init`] and read with [`tr`].
+
+mod de;
+mod en;
 
 use std::sync::OnceLock;
 
@@ -78,66 +85,11 @@ pub struct Strings {
     pub report_self_contained: &'static str, // "self-contained"
 }
 
-static EN: Strings = Strings {
-    html_lang: "en",
-    click_left: "Left click",
-    click_right: "Right click",
-    click_middle: "Middle click",
-    action_on: "{action} on {element}",
-    in_window: "{action} in window “{title}”",
-    in_active_window: "{action} in the active window",
-    element_generic: "element",
-    tray_ready: "stepshot — ready",
-    tray_recording: "● Recording — {n} step(s)",
-    tt_ready: "Ready",
-    tt_recording: "Recording — {n} step(s)",
-    menu_start: "Start recording",
-    menu_stop: "Stop recording & write report",
-    menu_open_folder: "Open last report folder",
-    menu_quit: "Quit stepshot",
-    notify_started: "Recording started",
-    notify_stopped: "Recording stopped — {n} step(s). Report saved.",
-    notify_no_input: "No input device — click capture is off. Add yourself to the “input” group and log back in.",
-    report_heading: "Recording",
-    report_started: "Started: {x}",
-    report_total: "Total steps: {n}",
-    report_step: "Step {n}",
-    report_steps_word: "step(s)",
-    report_self_contained: "self-contained",
-};
-
-static DE: Strings = Strings {
-    html_lang: "de",
-    click_left: "Linksklick",
-    click_right: "Rechtsklick",
-    click_middle: "Mittelklick",
-    action_on: "{action} auf {element}",
-    in_window: "{action} im Fenster „{title}“",
-    in_active_window: "{action} im aktiven Fenster",
-    element_generic: "Element",
-    tray_ready: "stepshot — bereit",
-    tray_recording: "● Aufnahme — {n} Schritt(e)",
-    tt_ready: "Bereit",
-    tt_recording: "Aufnahme — {n} Schritt(e)",
-    menu_start: "Aufnahme starten",
-    menu_stop: "Aufnahme beenden & Bericht schreiben",
-    menu_open_folder: "Letzten Bericht-Ordner öffnen",
-    menu_quit: "stepshot beenden",
-    notify_started: "Aufnahme gestartet",
-    notify_stopped: "Aufnahme beendet — {n} Schritt(e). Bericht gespeichert.",
-    notify_no_input: "Kein Eingabegerät — Klick-Erfassung ist aus. Trag dich in die Gruppe „input“ ein und melde dich neu an.",
-    report_heading: "Aufzeichnung",
-    report_started: "Gestartet: {x}",
-    report_total: "Schritte gesamt: {n}",
-    report_step: "Schritt {n}",
-    report_steps_word: "Schritt(e)",
-    report_self_contained: "eigenständig",
-};
-
+/// Maps a language to its string table (each defined in its own `i18n/*.rs`).
 fn strings_for(lang: Lang) -> &'static Strings {
     match lang {
-        Lang::En => &EN,
-        Lang::De => &DE,
+        Lang::En => &en::STRINGS,
+        Lang::De => &de::STRINGS,
     }
 }
 
@@ -150,5 +102,5 @@ pub fn init() {
 
 /// The active string table (English until [`init`] runs).
 pub fn tr() -> &'static Strings {
-    CURRENT.get().copied().unwrap_or(&EN)
+    CURRENT.get().copied().unwrap_or(&en::STRINGS)
 }
