@@ -221,7 +221,11 @@ fn capture_step(
         _ => None,
     };
 
-    if let Some(c) = ci {
+    // For a full-screen fallback the window-relative marker math doesn't apply;
+    // the baked-in cursor (include-cursor) already marks the spot.
+    if let Some(c) = ci
+        && !cap.is_screen
+    {
         let s = if cap.scale > 0.0 { cap.scale } else { 1.0 };
         let off_x = (cap.image.width() as f64 - c.frame_w as f64 * s) / 2.0;
         let off_y = (cap.image.height() as f64 - c.frame_h as f64 * s) / 2.0;
