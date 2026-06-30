@@ -12,8 +12,9 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::time::Duration;
 use zbus::interface;
 
-/// Global cursor position and frame rect of the active window (screen coords).
-#[derive(Debug, Clone, Copy)]
+/// Global cursor position and frame rect of the active window (screen coords),
+/// plus the name of the output (monitor) the cursor sits on.
+#[derive(Debug, Clone, Default)]
 pub struct CursorInfo {
     pub x: i32,
     pub y: i32,
@@ -21,6 +22,8 @@ pub struct CursorInfo {
     pub frame_y: i32,
     pub frame_w: i32,
     pub frame_h: i32,
+    /// KWin output name under the cursor (e.g. `DP-5`); empty if unknown.
+    pub screen: String,
 }
 
 /// D-Bus sink that the KWin script calls into.
@@ -30,10 +33,15 @@ struct Sink {
 
 #[interface(name = "org.stepshot.Sink")]
 impl Sink {
-    /// Called by the KWin script: "x,y,fx,fy,fw,fh" (all ints, CSV).
-    fn report(&self, nums: String) {
-        let v: Vec<i32> = nums
-            .split(',')
+    /// Called by the KWin script: "x,y,fx,fy,fw,fh,screen" (six ints + the
+    /// output name under the cursor; the trailing name may be empty).
+    fn report(&self, data: String) {
+        let parts: Vec<&str> = data.split(',').collect();
+        if parts.len() < 6 {
+            return;
+        }
+        let v: Vec<i32> = parts[..6]
+            .iter()
             .filter_map(|s| s.trim().parse().ok())
             .collect();
         if v.len() == 6 {
@@ -44,6 +52,10 @@ impl Sink {
                 frame_y: v[3],
                 frame_w: v[4],
                 frame_h: v[5],
+                screen: parts
+                    .get(6)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default(),
             });
         }
     }
@@ -57,13 +69,23 @@ pub struct KwinCursor {
     counter: AtomicI32,
 }
 
-// Report `workspace.cursorPos` + frame geometry to our sink.
+// Report `workspace.cursorPos` + active-window frame + the output name under
+// the cursor to our sink. The screen name lets us capture the right monitor
+// (e.g. the panel you clicked) when the active window itself has no content.
 const KWIN_SCRIPT: &str = r#"(function(){
   var p = workspace.cursorPos;
   var w = workspace.activeWindow;
   var g = w ? w.frameGeometry : null;
+  var sname = "";
+  var scr = workspace.screens || [];
+  for (var i = 0; i < scr.length; i++) {
+    var sg = scr[i].geometry;
+    if (sg && p.x >= sg.x && p.x < sg.x + sg.width && p.y >= sg.y && p.y < sg.y + sg.height) {
+      sname = scr[i].name; break;
+    }
+  }
   var a = [p.x, p.y, g?g.x:0, g?g.y:0, g?g.width:0, g?g.height:0].map(function(n){return Math.round(n);});
-  callDBus("org.stepshot.Sink", "/sink", "org.stepshot.Sink", "Report", a.join(","));
+  callDBus("org.stepshot.Sink", "/sink", "org.stepshot.Sink", "Report", a.join(",") + "," + sname);
 })();"#;
 
 impl KwinCursor {

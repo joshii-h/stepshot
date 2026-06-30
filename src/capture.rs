@@ -51,28 +51,28 @@ impl KdeCapturer {
 
 impl WindowCapturer for KdeCapturer {
     fn capture_active_window(&self) -> Result<Capture> {
-        let cap = self.capture_via("CaptureActiveWindow")?;
-
-        // Some "active windows" have no visible content: KWin's transparent
-        // Xwayland video bridge, or the bare desktop. Capturing those yields a
-        // blank image. Fall back to the whole screen so the step still shows
-        // context (wallpaper, panel) with the real cursor marking the spot.
-        if is_blank(&cap.image) {
-            if self.debug {
-                eprintln!("[stepshot] active-window capture is blank → CaptureActiveScreen");
-            }
-            let mut screen = self.capture_via("CaptureActiveScreen")?;
-            screen.is_screen = true;
-            return Ok(screen);
-        }
-        Ok(cap)
+        self.capture_via("CaptureActiveWindow", None)
     }
 }
 
 impl KdeCapturer {
-    /// Runs one ScreenShot2 capture method (`CaptureActiveWindow` /
-    /// `CaptureActiveScreen`) and decodes the result.
-    fn capture_via(&self, method: &str) -> Result<Capture> {
+    /// Capture a specific output by name (e.g. the monitor under the cursor) —
+    /// used as a fallback when the active window has no visible content, so the
+    /// panel/tray the user clicked is still in the shot.
+    pub fn capture_screen(&self, name: &str) -> Result<Capture> {
+        self.capture_via("CaptureScreen", Some(name))
+    }
+
+    /// Capture the active screen — last-resort fallback when the cursor's output
+    /// name is unknown.
+    pub fn capture_active_screen(&self) -> Result<Capture> {
+        self.capture_via("CaptureActiveScreen", None)
+    }
+
+    /// Runs one ScreenShot2 capture method and decodes the result. `screen` is
+    /// the leading output-name argument for `CaptureScreen`; `None` for the
+    /// `CaptureActiveWindow` / `CaptureActiveScreen` variants.
+    fn capture_via(&self, method: &str, screen: Option<&str>) -> Result<Capture> {
         // Pipe: KWin gets the write end, we read the image from the read end.
         let (mut reader, writer) = os_pipe::pipe().context("could not create pipe")?;
 
@@ -84,16 +84,24 @@ impl KdeCapturer {
 
         let fd = Fd::from(writer.as_fd());
 
-        let reply = self
-            .conn
-            .call_method(
+        // CaptureScreen takes a leading output-name argument; the others don't.
+        let path = "/org/kde/KWin/ScreenShot2";
+        let iface = Some("org.kde.KWin.ScreenShot2");
+        let call = match screen {
+            Some(name) => self.conn.call_method(
                 Some("org.kde.KWin"),
-                "/org/kde/KWin/ScreenShot2",
-                Some("org.kde.KWin.ScreenShot2"),
+                path,
+                iface,
                 method,
-                &(options, fd),
-            )
-            .with_context(|| format!("{method} failed (KWin may gate this interface)"))?;
+                &(name, options, fd),
+            ),
+            None => {
+                self.conn
+                    .call_method(Some("org.kde.KWin"), path, iface, method, &(options, fd))
+            }
+        };
+        let reply =
+            call.with_context(|| format!("{method} failed (KWin may gate this interface)"))?;
 
         // Close our write end, otherwise the read never reaches EOF.
         drop(writer);
@@ -211,7 +219,7 @@ fn decode_qimage(
 /// bridge, or the bare desktop. Real windows include decorations (titlebar,
 /// borders via `include-decoration`), so they never read as uniform. Sampled on
 /// a grid so it stays cheap on multi-megapixel images.
-fn is_blank(img: &RgbaImage) -> bool {
+pub(crate) fn is_blank(img: &RgbaImage) -> bool {
     let (w, h) = img.dimensions();
     if w == 0 || h == 0 {
         return true;

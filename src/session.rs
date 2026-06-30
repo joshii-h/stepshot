@@ -45,14 +45,27 @@ pub fn capture_step(
 
     let mut cap = capturer.capture_active_window().context("capture failed")?;
 
-    let element = match (atspi.as_ref(), ci) {
+    // An invisible active window (KWin's Xwayland video bridge, or the bare
+    // desktop) yields a blank image. Fall back to the monitor under the cursor
+    // so the panel/tray you actually clicked is captured; if the cursor's output
+    // is unknown, use the active screen.
+    if crate::capture::is_blank(&cap.image) {
+        cap = match ci.as_ref() {
+            Some(c) if !c.screen.is_empty() => capturer.capture_screen(&c.screen),
+            _ => capturer.capture_active_screen(),
+        }
+        .context("screen capture failed")?;
+        cap.is_screen = true;
+    }
+
+    let element = match (atspi.as_ref(), ci.as_ref()) {
         (Some(a), Some(c)) => a.element_at(c.x, c.y).map(|e| e.describe()),
         _ => None,
     };
 
     // For a full-screen fallback the window-relative marker math doesn't apply;
     // the baked-in cursor (include-cursor) already marks the spot.
-    if let Some(c) = ci
+    if let Some(c) = ci.as_ref()
         && !cap.is_screen
     {
         let s = if cap.scale > 0.0 { cap.scale } else { 1.0 };
