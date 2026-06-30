@@ -20,6 +20,11 @@ pub struct Capture {
     pub window_title: Option<String>,
     /// Scale factor (HiDPI): image pixels = logical coords * scale.
     pub scale: f64,
+    /// True when this is a full-screen fallback (the active "window" had no
+    /// visible content). The click marker is then skipped — the baked-in cursor
+    /// (`include-cursor`) already marks the spot, and the window-relative marker
+    /// math wouldn't apply to a whole-screen image.
+    pub is_screen: bool,
 }
 
 /// Backend that photographs the currently active window.
@@ -46,6 +51,28 @@ impl KdeCapturer {
 
 impl WindowCapturer for KdeCapturer {
     fn capture_active_window(&self) -> Result<Capture> {
+        let cap = self.capture_via("CaptureActiveWindow")?;
+
+        // Some "active windows" have no visible content: KWin's transparent
+        // Xwayland video bridge, or the bare desktop. Capturing those yields a
+        // blank image. Fall back to the whole screen so the step still shows
+        // context (wallpaper, panel) with the real cursor marking the spot.
+        if is_blank(&cap.image) {
+            if self.debug {
+                eprintln!("[stepshot] active-window capture is blank → CaptureActiveScreen");
+            }
+            let mut screen = self.capture_via("CaptureActiveScreen")?;
+            screen.is_screen = true;
+            return Ok(screen);
+        }
+        Ok(cap)
+    }
+}
+
+impl KdeCapturer {
+    /// Runs one ScreenShot2 capture method (`CaptureActiveWindow` /
+    /// `CaptureActiveScreen`) and decodes the result.
+    fn capture_via(&self, method: &str) -> Result<Capture> {
         // Pipe: KWin gets the write end, we read the image from the read end.
         let (mut reader, writer) = os_pipe::pipe().context("could not create pipe")?;
 
@@ -63,10 +90,10 @@ impl WindowCapturer for KdeCapturer {
                 Some("org.kde.KWin"),
                 "/org/kde/KWin/ScreenShot2",
                 Some("org.kde.KWin.ScreenShot2"),
-                "CaptureActiveWindow",
+                method,
                 &(options, fd),
             )
-            .context("CaptureActiveWindow failed (KWin may gate this interface)")?;
+            .with_context(|| format!("{method} failed (KWin may gate this interface)"))?;
 
         // Close our write end, otherwise the read never reaches EOF.
         drop(writer);
@@ -104,6 +131,7 @@ impl WindowCapturer for KdeCapturer {
             image,
             window_title,
             scale,
+            is_screen: false,
         })
     }
 }
@@ -176,6 +204,35 @@ fn decode_qimage(
         }
     }
     Ok(img)
+}
+
+/// Heuristic: is the image essentially one uniform color? Such captures come
+/// from windows with no visible content — KWin's transparent Xwayland video
+/// bridge, or the bare desktop. Real windows include decorations (titlebar,
+/// borders via `include-decoration`), so they never read as uniform. Sampled on
+/// a grid so it stays cheap on multi-megapixel images.
+fn is_blank(img: &RgbaImage) -> bool {
+    let (w, h) = img.dimensions();
+    if w == 0 || h == 0 {
+        return true;
+    }
+    let reference = *img.get_pixel(0, 0);
+    let step_x = (w / 64).max(1);
+    let step_y = (h / 64).max(1);
+    let (mut total, mut same) = (0u32, 0u32);
+    let mut y = 0;
+    while y < h {
+        let mut x = 0;
+        while x < w {
+            total += 1;
+            if *img.get_pixel(x, y) == reference {
+                same += 1;
+            }
+            x += step_x;
+        }
+        y += step_y;
+    }
+    same as f32 / total as f32 >= 0.995
 }
 
 /// Pull an integer value from the result dict (Qt mixes i32/u32/i64).
