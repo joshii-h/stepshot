@@ -47,7 +47,7 @@ v0.1 items below are shipped in the alpha.
 | R11 | Custom **SVG logo** (camera, red dot when active) — no emoji | ✅ shipped |
 | R12 | **i18n**, simple to extend (English + German) | ✅ shipped |
 | R13 | Released as **alpha**, English UI, permissive (0BSD) | ✅ shipped |
-| R14 | **Export** to PDF and Word (like comparable tools) | 🚧 milestone 0.2 |
+| R14 | **Export** to PDF and Word (like comparable tools) | ✅ shipped (0.2) |
 | R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 milestone 0.3 |
 
 ## Platform support matrix
@@ -71,10 +71,18 @@ platform-neutral.
 KDE/Wayland foundation: tray app, per-window capture, click marker, AT-SPI
 element naming, self-contained HTML + Markdown report, notifications, i18n.
 
-### 0.2 — Exports
-- [ ] **PDF** export (paginated, embedded screenshots, no external runtime).
-- [ ] **DOCX** export (Word-compatible, embedded screenshots).
-- [ ] Reports module emits HTML + Markdown + PDF + DOCX on finalize.
+### 0.2 — Exports (shipped)
+- [x] **PDF** export (paginated, embedded screenshots, no external runtime).
+- [x] **DOCX** export (Word-compatible, embedded screenshots).
+- [x] Reports module emits HTML + Markdown + PDF + DOCX on finalize.
+
+### 0.2.x — Capture refinements (shipped)
+- [x] Graceful start without an input device: keep the tray alive + notify
+      instead of exiting silently.
+- [x] Full-screen fallback for invisible active windows (Xwayland video bridge,
+      bare desktop), capturing the **monitor under the cursor** (multi-monitor).
+- [x] One file per language under `src/i18n/`; `main.rs` split into
+      `session.rs` + `selftest.rs`.
 
 ### 0.3 — Windows backend
 - [ ] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
