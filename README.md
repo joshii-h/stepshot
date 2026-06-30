@@ -29,7 +29,7 @@ It lives in the system tray; you start and stop recording from there.
 | Purpose | Requirement |
 |---------|-------------|
 | Screenshot authorization | a `.desktop` file with `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (created by `install.sh`) |
-| Click capture | user in the `input` group |
+| Click capture | user in the `input` group — `sudo usermod -aG input "$USER"`, then log out and back in |
 | Element detection (Qt/KDE) | **qtbase built with the `accessibility` USE flag** (Gentoo) / the Qt AT-SPI bridge |
 | Element detection (GTK) | `at-spi2-atk` / `libatk-bridge` (usually present) |
 | Element detection (Firefox) | activates automatically once an AT is detected |
@@ -73,6 +73,14 @@ has an associated `.desktop` file declaring
 `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (KWin matches the
 resolved executable path against `Exec=`). `install.sh` sets this up — which is
 why it **copies** the binary instead of symlinking it.
+
+> **`NoAuthorized` after joining the `input` group?** KWin reads the caller's
+> `/proc/<pid>/exe` to find its `.desktop`. If you start stepshot through
+> `newgrp input` / `sg input` instead of re-logging in, the gid switch makes the
+> process *non-dumpable* (e.g. Fedora's `suid_dumpable=2`), so that link is
+> root-owned and unreadable — KWin then refuses the screenshot. **Log out and
+> back in** (a normal login puts `input` in your groups without this side effect)
+> rather than using `newgrp`.
 
 ## Permissions & privacy
 

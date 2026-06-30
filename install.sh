@@ -54,3 +54,13 @@ command -v gtk-update-icon-cache >/dev/null 2>&1 && gtk-update-icon-cache -f "${
 echo ""
 echo "Done. stepshot is now in your application menu (or run 'stepshot')."
 echo "It shows up as a camera icon in the system tray — start/stop recording there."
+
+# Click capture reads /dev/input directly, which requires 'input' group membership.
+if ! id -nG | tr ' ' '\n' | grep -qx input; then
+    echo ""
+    echo ">> NOTE: you are not in the 'input' group — click capture won't work yet."
+    echo "   Run this once, then log out and back in:"
+    echo ""
+    echo "       sudo usermod -aG input \"\$USER\""
+    echo ""
+fi
