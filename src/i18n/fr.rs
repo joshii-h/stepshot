@@ -1,0 +1,32 @@
+//! French strings — machine-assisted translation; native review welcome.
+
+use super::Strings;
+
+pub static STRINGS: Strings = Strings {
+    html_lang: "fr",
+    click_left: "Clic gauche",
+    click_right: "Clic droit",
+    click_middle: "Clic du milieu",
+    action_on: "{action} sur {element}",
+    in_window: "{action} dans la fenêtre « {title} »",
+    in_active_window: "{action} dans la fenêtre active",
+    in_screen: "{action} (vue plein écran)",
+    element_generic: "élément",
+    tray_ready: "stepshot — prêt",
+    tray_recording: "● Enregistrement — {n} étape(s)",
+    tt_ready: "Prêt",
+    tt_recording: "Enregistrement — {n} étape(s)",
+    menu_start: "Démarrer l’enregistrement",
+    menu_stop: "Arrêter l’enregistrement et écrire le rapport",
+    menu_open_folder: "Ouvrir le dernier dossier de rapport",
+    menu_quit: "Quitter stepshot",
+    notify_started: "Enregistrement démarré",
+    notify_stopped: "Enregistrement terminé — {n} étape(s). Rapport enregistré.",
+    notify_no_input: "Aucun périphérique d’entrée — la capture des clics est désactivée. Ajoutez-vous au groupe « input », puis redémarrez (se reconnecter ne suffit pas).",
+    report_heading: "Enregistrement",
+    report_started: "Démarré : {x}",
+    report_total: "Étapes au total : {n}",
+    report_step: "Étape {n}",
+    report_steps_word: "étape(s)",
+    report_self_contained: "autonome",
+};

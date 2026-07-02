@@ -149,8 +149,10 @@ rest (`model`, `report`, `annotate`) stays shared. A Windows backend
 
 UI, notifications and the report are localized. The language is auto-detected
 from `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` (defaults to English). Currently
-**English** (`src/i18n/en.rs`) and **German** (`src/i18n/de.rs`) ship; each
-language is its own file, so adding one is a self-contained PR.
+**English**, **German**, **French**, **Spanish** and **Italian** ship (one file
+each under `src/i18n/`), so adding a language is a self-contained PR. French,
+Spanish and Italian are machine-assisted translations — native-speaker review
+is welcome.
 
 Adding a language is deliberately simple and compiler-checked:
 

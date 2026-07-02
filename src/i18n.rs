@@ -17,6 +17,9 @@
 
 mod de;
 mod en;
+mod es;
+mod fr;
+mod it;
 
 use std::sync::OnceLock;
 
@@ -25,6 +28,9 @@ use std::sync::OnceLock;
 pub enum Lang {
     En,
     De,
+    Fr,
+    Es,
+    It,
 }
 
 impl Lang {
@@ -41,10 +47,13 @@ impl Lang {
 
     /// Map a locale value (e.g. `de_CH.UTF-8`, `de:en_US`) to a language.
     fn from_locale(v: &str) -> Self {
-        if v.to_lowercase().starts_with("de") {
-            Lang::De
-        } else {
-            Lang::En
+        let v = v.to_lowercase();
+        match v.get(..2) {
+            Some("de") => Lang::De,
+            Some("fr") => Lang::Fr,
+            Some("es") => Lang::Es,
+            Some("it") => Lang::It,
+            _ => Lang::En,
         }
     }
 }
@@ -95,6 +104,9 @@ fn strings_for(lang: Lang) -> &'static Strings {
     match lang {
         Lang::En => &en::STRINGS,
         Lang::De => &de::STRINGS,
+        Lang::Fr => &fr::STRINGS,
+        Lang::Es => &es::STRINGS,
+        Lang::It => &it::STRINGS,
     }
 }
 
@@ -119,8 +131,11 @@ mod tests {
         assert!(Lang::from_locale("de_CH.UTF-8") == Lang::De);
         assert!(Lang::from_locale("DE") == Lang::De);
         assert!(Lang::from_locale("de:en_US") == Lang::De);
+        assert!(Lang::from_locale("fr_FR.UTF-8") == Lang::Fr);
+        assert!(Lang::from_locale("es_MX") == Lang::Es);
+        assert!(Lang::from_locale("it_IT@euro") == Lang::It);
         assert!(Lang::from_locale("en_US.UTF-8") == Lang::En);
-        assert!(Lang::from_locale("fr_FR") == Lang::En); // unsupported → fallback
+        assert!(Lang::from_locale("pt_BR") == Lang::En); // unsupported → fallback
         assert!(Lang::from_locale("") == Lang::En);
         assert!(Lang::from_locale("C") == Lang::En);
     }
