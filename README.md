@@ -31,8 +31,9 @@ It lives in the system tray; you start and stop recording from there.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
   and a **self-contained** `report.html` (images embedded as base64) plus `report.md`.
-- **Exports**: on stop you also get `report.pdf` (paginated, one page per step) and
-  `report.docx` (Word) with the screenshots embedded — pure-Rust, no external tools.
+- **Exports**: on stop you also get `report.pdf` (paginated), `report.docx` (Word),
+  `report.odt` (LibreOffice), `report.rtf` and `report.txt` — screenshots embedded,
+  pure-Rust, no external tools. Pick which formats via `[export] formats`.
 
 ## Requirements
 
@@ -130,7 +131,7 @@ stepshot --write-config   # → ~/.config/stepshot/config.toml (never overwrites
 # radius = 20.0         # marker size in pixels
 
 [export]                # which report formats to write (default: all)
-# formats = ["html", "md", "pdf", "docx"]
+# formats = ["html", "md", "pdf", "docx", "odt", "rtf", "txt"]
 
 [capture]               # click handling
 # buttons = ["left", "right", "middle"]   # which buttons record (default: all)
@@ -201,6 +202,8 @@ src/
   model.rs    Step/Button + description logic
   report.rs   HTML + Markdown (honors the export selection)
   export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
+  export_odt.rs / export_rtf.rs / export_txt.rs  ODT, RTF and plain-text exports
+  zip.rs      minimal dependency-free store-only ZIP writer (ODT container)
   session.rs  session.json (source of truth) + per-click capture step
   apply.rs    stepshot apply — rebuild a session from session.json (+ edits.json)
   edit.rs     stepshot edit — native in-browser editor (loopback HTTP server)

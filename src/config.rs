@@ -64,8 +64,17 @@ pub struct ExportConfig {
 
 impl Default for ExportConfig {
     fn default() -> Self {
+        // Every available format — the user narrows it down in the config.
         Self {
-            formats: vec![Format::Html, Format::Md, Format::Pdf, Format::Docx],
+            formats: vec![
+                Format::Html,
+                Format::Md,
+                Format::Pdf,
+                Format::Docx,
+                Format::Odt,
+                Format::Rtf,
+                Format::Txt,
+            ],
         }
     }
 }
@@ -83,6 +92,9 @@ pub enum Format {
     Md,
     Pdf,
     Docx,
+    Odt,
+    Rtf,
+    Txt,
 }
 
 impl Format {
@@ -92,6 +104,9 @@ impl Format {
             "md" | "markdown" => Some(Format::Md),
             "pdf" => Some(Format::Pdf),
             "docx" | "word" => Some(Format::Docx),
+            "odt" | "libreoffice" | "writer" => Some(Format::Odt),
+            "rtf" => Some(Format::Rtf),
+            "txt" | "text" | "plain" => Some(Format::Txt),
             _ => None,
         }
     }
@@ -206,7 +221,7 @@ const EXAMPLE_TOML: &str = "\
 
 [export]
 # Which report formats to write. Default: all of them.
-# formats = [\"html\", \"md\", \"pdf\", \"docx\"]
+# formats = [\"html\", \"md\", \"pdf\", \"docx\", \"odt\", \"rtf\", \"txt\"]
 
 [capture]
 # Which mouse buttons create steps. Default: all three.
@@ -330,8 +345,10 @@ mod tests {
         let c = Config::from_toml_str("");
         assert!(c.output_dir.is_none());
         assert_eq!(c.marker.fill, [255, 225, 60]);
-        assert_eq!(c.export.formats.len(), 4);
+        assert_eq!(c.export.formats.len(), 7);
         assert!(c.export.has(Format::Pdf));
+        assert!(c.export.has(Format::Odt));
+        assert!(c.export.has(Format::Txt));
     }
 
     #[test]
@@ -374,7 +391,7 @@ mod tests {
         assert_eq!(c.marker.fill, [255, 225, 60]); // unchanged
         assert!((c.marker.fill_alpha - 1.0).abs() < 1e-6); // clamped
         assert!((c.marker.radius - 20.0).abs() < 1e-6); // rejected
-        assert_eq!(c.export.formats.len(), 4); // empty → default
+        assert_eq!(c.export.formats.len(), 7); // empty → default (all)
     }
 
     #[test]
@@ -418,6 +435,9 @@ mod tests {
     fn format_aliases() {
         assert_eq!(Format::parse("markdown"), Some(Format::Md));
         assert_eq!(Format::parse("WORD"), Some(Format::Docx));
+        assert_eq!(Format::parse("LibreOffice"), Some(Format::Odt));
+        assert_eq!(Format::parse("rtf"), Some(Format::Rtf));
+        assert_eq!(Format::parse("plain"), Some(Format::Txt));
         assert_eq!(Format::parse("xls"), None);
     }
 }

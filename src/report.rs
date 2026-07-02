@@ -61,6 +61,21 @@ pub fn write_final(dir: &Path, steps: &[Step], started: &str, export: &ExportCon
     {
         eprintln!("[stepshot] DOCX export failed: {e:#}");
     }
+    if export.has(Format::Odt)
+        && let Err(e) = crate::export_odt::write(dir, steps, started)
+    {
+        eprintln!("[stepshot] ODT export failed: {e:#}");
+    }
+    if export.has(Format::Rtf)
+        && let Err(e) = crate::export_rtf::write(dir, steps, started)
+    {
+        eprintln!("[stepshot] RTF export failed: {e:#}");
+    }
+    if export.has(Format::Txt)
+        && let Err(e) = crate::export_txt::write(dir, steps, started)
+    {
+        eprintln!("[stepshot] TXT export failed: {e:#}");
+    }
     Ok(())
 }
 

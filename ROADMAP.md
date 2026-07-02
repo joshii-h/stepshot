@@ -173,12 +173,13 @@ session" opens the report as the native entry point. Each session also gains a
       formats get written (default: all available). Honored by both the
       recording loop and `stepshot apply`.
 
-### 0.7 — More export formats
-Round out "offer every export the user might want, they pick." Each new renderer
-plugs into the 0.6 export selection.
-- [ ] ODT (LibreOffice Writer).
-- [ ] RTF (Word/WordPad).
-- [ ] Plain text (.txt) — numbered steps, images referenced by filename.
+### 0.7 — More export formats (shipped)
+"Offer every export the user might want, they pick." Each renderer plugs into
+the 0.6 export selection; the default is now **all** of them.
+- [x] ODT (LibreOffice Writer) — hand-rolled store-only ZIP container
+      (`zip.rs`), embedded screenshots, no dependency.
+- [x] RTF (Word/WordPad) — screenshots embedded as `\pngblip` hex.
+- [x] Plain text (.txt) — numbered steps, images referenced by filename.
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see

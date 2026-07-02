@@ -13,7 +13,10 @@ mod config;
 mod cursor;
 mod edit;
 mod export_docx;
+mod export_odt;
 mod export_pdf;
+mod export_rtf;
+mod export_txt;
 mod i18n;
 mod icon;
 mod input;
@@ -24,6 +27,7 @@ mod report;
 mod selftest;
 mod session;
 mod tray;
+mod zip;
 
 use a11y::Atspi;
 use anyhow::{Context, Result};
