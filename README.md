@@ -80,6 +80,33 @@ STEPSHOT_ATDUMP=1  stepshot   # find the first named button and resolve it back
 
 `stepshot --help` / `--version` work as expected.
 
+## Configuration
+
+stepshot works with **no config file** — everything below is optional. To
+customize, write a commented starter file and edit it:
+
+```sh
+stepshot --write-config   # → ~/.config/stepshot/config.toml (never overwrites)
+```
+
+```toml
+[general]
+# output_dir = "~/Pictures/stepshot"   # a path given on the command line still wins
+
+[marker]                # the translucent click highlight
+# fill = "#FFE13C"      # highlighter yellow
+# fill_alpha = 0.35     # see-through so text under it stays readable
+# rim = "#FFA500"       # amber outline
+# rim_alpha = 0.75
+# radius = 20.0         # marker size in pixels
+
+[export]                # which report formats to write (default: all)
+# formats = ["html", "md", "pdf", "docx"]
+```
+
+Colors are `"#RRGGBB"`, alpha is `0.0`–`1.0`. A missing or malformed file falls
+back to the built-in defaults (with a warning), never blocking startup.
+
 ## How authorization works (KDE)
 
 KWin gates `org.kde.KWin.ScreenShot2`: a caller is only allowed if its executable
@@ -136,9 +163,10 @@ src/
   a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
   annotate.rs draws the click marker into the image
   i18n.rs     minimal, dependency-free translations (one file per language)
-  i18n/       en.rs, de.rs — string tables (add a language by adding a file)
+  i18n/       en.rs, de.rs, fr.rs, es.rs, it.rs — string tables (one per language)
+  config.rs   ~/.config/stepshot/config.toml (marker, export selection, output dir)
   model.rs    Step/Button + description logic
-  report.rs   HTML + Markdown
+  report.rs   HTML + Markdown (honors the export selection)
   export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
 ```
 

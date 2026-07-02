@@ -3,6 +3,7 @@
 
 use crate::a11y::Atspi;
 use crate::capture::KdeCapturer;
+use crate::config::Config;
 use crate::cursor::KwinCursor;
 use crate::icon;
 use crate::model::Button;
@@ -17,6 +18,7 @@ pub fn run_test_modes(
     capturer: &KdeCapturer,
     cursor: &Option<KwinCursor>,
     atspi: &mut Option<Atspi>,
+    config: &Config,
 ) -> Result<bool> {
     if std::env::var_os("STEPSHOT_ICON").is_some() {
         icon::debug_png(false, 128)
@@ -60,15 +62,23 @@ pub fn run_test_modes(
         return Ok(true);
     }
     if std::env::var_os("STEPSHOT_ONESHOT").is_some() {
-        let dir = output_base()?.join(format!("oneshot-{}", Local::now().format("%H-%M-%S")));
+        let dir = output_base(config)?.join(format!("oneshot-{}", Local::now().format("%H-%M-%S")));
         std::fs::create_dir_all(&dir)?;
         if let Some(a) = atspi.as_mut() {
             a.enable();
         }
         let started = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        let step = capture_step(1, Button::Left, &dir, capturer, cursor, atspi)?;
+        let step = capture_step(
+            1,
+            Button::Left,
+            &dir,
+            capturer,
+            cursor,
+            atspi,
+            &config.marker,
+        )?;
         println!("Oneshot → {}", step.describe());
-        report::write_final(&dir, &[step], &started)?;
+        report::write_final(&dir, &[step], &started, &config.export)?;
         if let Some(a) = atspi.as_ref() {
             a.restore();
         }

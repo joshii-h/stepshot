@@ -8,6 +8,7 @@
 mod a11y;
 mod annotate;
 mod capture;
+mod config;
 mod cursor;
 mod export_docx;
 mod export_pdf;
@@ -25,6 +26,7 @@ use a11y::Atspi;
 use anyhow::{Context, Result};
 use capture::KdeCapturer;
 use chrono::Local;
+use config::Config;
 use cursor::KwinCursor;
 use input::{ClickSource, EvdevClickSource};
 use ksni::blocking::TrayMethods;
@@ -46,8 +48,9 @@ Arguments:
   OUTPUT_DIR   base folder for sessions (default: ~/Pictures/stepshot)
 
 Options:
-  -h, --help      print this help
-  -V, --version   print the version";
+  -h, --help       print this help
+  -V, --version    print the version
+      --write-config  write a commented example config and exit";
 
 fn main() -> Result<()> {
     match std::env::args().nth(1).as_deref() {
@@ -59,6 +62,9 @@ fn main() -> Result<()> {
             println!("stepshot {}", env!("CARGO_PKG_VERSION"));
             return Ok(());
         }
+        Some("--write-config") => {
+            return write_config();
+        }
         Some(flag) if flag.starts_with('-') => {
             eprintln!("unknown option: {flag}\n\n{USAGE}");
             std::process::exit(2);
@@ -67,17 +73,18 @@ fn main() -> Result<()> {
     }
 
     i18n::init();
+    let config = Config::load();
 
     let capturer = KdeCapturer::connect()?;
     let source = EvdevClickSource;
     let cursor = KwinCursor::new().ok();
     let mut atspi = Atspi::connect().ok();
 
-    if run_test_modes(&capturer, &cursor, &mut atspi)? {
+    if run_test_modes(&capturer, &cursor, &mut atspi, &config)? {
         return Ok(());
     }
 
-    let base = output_base()?;
+    let base = output_base(&config)?;
 
     // Shared state with the tray.
     let recording = Arc::new(AtomicBool::new(false));
@@ -161,7 +168,7 @@ fn main() -> Result<()> {
                         for dropped in session::trim_stop_gesture(&mut s.steps, pending) {
                             let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
                         }
-                        finalize(&s);
+                        finalize(&s, &config.export);
                         if let Some(a) = atspi.as_ref() {
                             a.restore();
                         }
@@ -189,7 +196,7 @@ fn main() -> Result<()> {
                                 let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
                             }
                         }
-                        finalize(&s);
+                        finalize(&s, &config.export);
                         if let Some(a) = atspi.as_ref() {
                             a.restore();
                         }
@@ -208,11 +215,20 @@ fn main() -> Result<()> {
             Ok(click) => {
                 if let Some(s) = session.as_mut() {
                     let index = s.steps.len() + 1;
-                    match capture_step(index, click.button, &s.dir, &capturer, &cursor, &atspi) {
+                    match capture_step(
+                        index,
+                        click.button,
+                        &s.dir,
+                        &capturer,
+                        &cursor,
+                        &atspi,
+                        &config.marker,
+                    ) {
                         Ok(step) => {
                             s.steps.push(step);
                             steps_count.store(s.steps.len(), Ordering::SeqCst);
-                            let _ = report::write_reports(&s.dir, &s.steps, &s.started);
+                            let _ =
+                                report::write_reports(&s.dir, &s.steps, &s.started, &config.export);
                         }
                         Err(e) => eprintln!("[stepshot] step {index}: {e:#}"),
                     }
@@ -235,4 +251,20 @@ fn drain_clicks(rx: &mpsc::Receiver<model::Click>) -> usize {
         n += 1;
     }
     n
+}
+
+/// `--write-config`: write the commented example config to the standard path
+/// (never overwriting an existing one) and print where it went.
+fn write_config() -> Result<()> {
+    let path = config::config_path().context("could not determine the config path")?;
+    if path.exists() {
+        eprintln!("config already exists: {}", path.display());
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).context("could not create the config folder")?;
+    }
+    std::fs::write(&path, Config::example_toml()).context("could not write the config file")?;
+    println!("wrote example config: {}", path.display());
+    Ok(())
 }

@@ -2,8 +2,9 @@
 //! writing the final report. The tray event loop in `main` drives these.
 
 use crate::a11y::Atspi;
-use crate::annotate;
+use crate::annotate::{self, MarkerStyle};
 use crate::capture::{KdeCapturer, WindowCapturer};
+use crate::config::{Config, ExportConfig};
 use crate::cursor::KwinCursor;
 use crate::model::{Button, Step};
 use crate::report;
@@ -18,13 +19,14 @@ pub struct Session {
     pub steps: Vec<Step>,
 }
 
-/// Writes the session report (no-op for 0 steps).
-pub fn finalize(s: &Session) {
+/// Writes the session report (no-op for 0 steps), honoring the configured
+/// export format selection.
+pub fn finalize(s: &Session, export: &ExportConfig) {
     if s.steps.is_empty() {
         return;
     }
     // Self-contained HTML (images embedded) — a single file you can send.
-    if let Err(e) = report::write_final(&s.dir, &s.steps, &s.started) {
+    if let Err(e) = report::write_final(&s.dir, &s.steps, &s.started, export) {
         eprintln!("[stepshot] could not write report: {e:#}");
     } else {
         eprintln!("[stepshot] report: {}", s.dir.join("report.html").display());
@@ -40,6 +42,7 @@ pub fn capture_step(
     capturer: &KdeCapturer,
     cursor: &Option<KwinCursor>,
     atspi: &Option<Atspi>,
+    marker: &MarkerStyle,
 ) -> Result<Step> {
     let ci = cursor.as_ref().and_then(|c| c.fetch());
 
@@ -84,7 +87,7 @@ pub fn capture_step(
         let off_y = (cap.image.height() as f64 - c.frame_h as f64 * s) / 2.0;
         let mx = ((c.x - c.frame_x) as f64 * s + off_x).round() as i32;
         let my = ((c.y - c.frame_y) as f64 * s + off_y).round() as i32;
-        annotate::draw_click_marker(&mut cap.image, mx, my);
+        annotate::draw_click_marker(&mut cap.image, mx, my, marker);
     }
 
     let image_file = format!("step-{index:03}.png");
@@ -141,15 +144,36 @@ pub fn trim_stop_gesture(steps: &mut Vec<Step>, pending: usize) -> Vec<Step> {
     removed
 }
 
-/// Base folder for sessions: optional CLI argument, otherwise ~/Pictures/stepshot.
-pub fn output_base() -> Result<PathBuf> {
+/// Base folder for sessions. Precedence: a CLI path argument, then the config
+/// `output_dir`, then `~/Pictures/stepshot`.
+pub fn output_base(config: &Config) -> Result<PathBuf> {
     if let Some(arg) = std::env::args().nth(1)
         && !arg.starts_with('-')
     {
         return Ok(PathBuf::from(arg));
     }
+    if let Some(dir) = &config.output_dir {
+        return Ok(expand_tilde(dir));
+    }
     let home = std::env::var_os("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join("Pictures").join("stepshot"))
+}
+
+/// Expand a leading `~/` (or bare `~`) to `$HOME`; leave anything else as-is.
+fn expand_tilde(p: &Path) -> PathBuf {
+    let Some(s) = p.to_str() else {
+        return p.to_path_buf();
+    };
+    let Some(home) = std::env::var_os("HOME") else {
+        return p.to_path_buf();
+    };
+    if s == "~" {
+        PathBuf::from(home)
+    } else if let Some(rest) = s.strip_prefix("~/") {
+        PathBuf::from(home).join(rest)
+    } else {
+        p.to_path_buf()
+    }
 }
 
 #[cfg(test)]

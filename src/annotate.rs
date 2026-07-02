@@ -6,22 +6,52 @@
 
 use image::{Rgba, RgbaImage};
 
-/// Fill: highlighter yellow, weak alpha so text shines through.
-const FILL: [u8; 3] = [255, 225, 60];
-const FILL_ALPHA: f32 = 0.35;
-/// Rim: amber, stronger alpha for contrast on light backgrounds.
-const RIM: [u8; 3] = [255, 165, 0];
-const RIM_ALPHA: f32 = 0.75;
+/// Appearance of the click highlight. Defaults reproduce the built-in
+/// translucent-yellow marker; overridable via the config file (`[marker]`).
+#[derive(Debug, Clone, Copy)]
+pub struct MarkerStyle {
+    /// Fill color (the translucent highlight).
+    pub fill: [u8; 3],
+    /// Fill opacity, 0.0–1.0 — kept low so text under it stays readable.
+    pub fill_alpha: f32,
+    /// Rim color (the contrast outline).
+    pub rim: [u8; 3],
+    /// Rim opacity, 0.0–1.0.
+    pub rim_alpha: f32,
+    /// Fill radius in pixels; the rim sits just outside it.
+    pub radius: f32,
+}
 
-/// Draws the translucent highlight circle around (cx, cy).
-pub fn draw_click_marker(img: &mut RgbaImage, cx: i32, cy: i32) {
+impl Default for MarkerStyle {
+    fn default() -> Self {
+        Self {
+            fill: [255, 225, 60], // highlighter yellow
+            fill_alpha: 0.35,     // see-through
+            rim: [255, 165, 0],   // amber
+            rim_alpha: 0.75,      // stronger for contrast on light backgrounds
+            radius: 20.0,
+        }
+    }
+}
+
+/// Draws the translucent highlight around (cx, cy) using `style`.
+pub fn draw_click_marker(img: &mut RgbaImage, cx: i32, cy: i32, style: &MarkerStyle) {
     let (w, h) = (img.width() as i32, img.height() as i32);
-    if cx < -40 || cy < -40 || cx >= w + 40 || cy >= h + 40 {
+    let margin = (style.radius + 4.0) as i32;
+    if cx < -margin || cy < -margin || cx >= w + margin || cy >= h + margin {
         return; // entirely off-canvas → draw nothing
     }
 
-    fill_circle(img, cx, cy, 20.0, FILL, FILL_ALPHA);
-    draw_ring(img, cx, cy, 19.0, 22.0, RIM, RIM_ALPHA);
+    fill_circle(img, cx, cy, style.radius, style.fill, style.fill_alpha);
+    draw_ring(
+        img,
+        cx,
+        cy,
+        style.radius - 1.0,
+        style.radius + 2.0,
+        style.rim,
+        style.rim_alpha,
+    );
 }
 
 /// Translucent filled circle.
@@ -85,15 +115,16 @@ mod tests {
     fn marker_is_translucent_not_opaque() {
         // On a white background the fill must mix with the white below —
         // neither pure white (invisible) nor pure yellow (covering the text).
+        let style = MarkerStyle::default();
         let mut img = RgbaImage::from_pixel(100, 100, Rgba([255, 255, 255, 255]));
-        draw_click_marker(&mut img, 50, 50);
+        draw_click_marker(&mut img, 50, 50, &style);
         let p = img.get_pixel(50, 50).0;
         assert_ne!(p, [255, 255, 255, 255], "marker must be visible");
         assert!(
-            p[2] > FILL[2] && p[2] < 255,
+            p[2] > style.fill[2] && p[2] < 255,
             "blue channel {} should sit between yellow ({}) and white (255)",
             p[2],
-            FILL[2]
+            style.fill[2]
         );
         assert_eq!(p[3], 255, "opaque background stays opaque");
     }
@@ -101,7 +132,7 @@ mod tests {
     #[test]
     fn rim_is_stronger_than_fill() {
         let mut img = RgbaImage::from_pixel(100, 100, Rgba([255, 255, 255, 255]));
-        draw_click_marker(&mut img, 50, 50);
+        draw_click_marker(&mut img, 50, 50, &MarkerStyle::default());
         let fill = img.get_pixel(50, 50).0;
         let rim = img.get_pixel(50 + 21, 50).0; // inside the 19..22 band
         assert!(
@@ -113,13 +144,28 @@ mod tests {
     }
 
     #[test]
+    fn custom_style_is_honored() {
+        // A fully opaque solid box-like marker: alpha 1.0 → pure fill color.
+        let style = MarkerStyle {
+            fill: [10, 20, 30],
+            fill_alpha: 1.0,
+            radius: 8.0,
+            ..MarkerStyle::default()
+        };
+        let mut img = RgbaImage::from_pixel(40, 40, Rgba([255, 255, 255, 255]));
+        draw_click_marker(&mut img, 20, 20, &style);
+        assert_eq!(img.get_pixel(20, 20).0[..3], [10, 20, 30]);
+    }
+
+    #[test]
     fn off_canvas_draws_nothing_and_does_not_panic() {
+        let style = MarkerStyle::default();
         let mut img = RgbaImage::from_pixel(50, 50, Rgba([0, 0, 0, 255]));
         let before = img.clone();
-        draw_click_marker(&mut img, -100, -100);
+        draw_click_marker(&mut img, -100, -100, &style);
         assert_eq!(img, before);
         // Partially off-canvas must not panic.
-        draw_click_marker(&mut img, 0, 0);
-        draw_click_marker(&mut img, 49, 49);
+        draw_click_marker(&mut img, 0, 0, &style);
+        draw_click_marker(&mut img, 49, 49, &style);
     }
 }
