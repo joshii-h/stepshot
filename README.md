@@ -93,7 +93,8 @@ This opens a **native in-browser editor** (a tiny local server on `127.0.0.1`,
 no dependencies, no data leaves your machine). Drag across a screenshot to
 **redact** an area — or one-click **“Redact clicked element”** to blank the
 button/field that was clicked — edit the description text, delete or reorder
-steps, then **Apply**. The edits are written straight back to the session and
+steps, or **＋ Add step** to insert a manual step (text, optional image), then
+**Apply**. The edits are written straight back to the session and
 every enabled export is regenerated; there is nothing to download. Redaction is
 **destructive** (the original pixels in `step-NNN.png` are gone).
 

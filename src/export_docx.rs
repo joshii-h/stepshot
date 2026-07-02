@@ -40,7 +40,9 @@ pub fn write(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
         docx = docx.add_paragraph(para_run(Run::new().add_text(s.describe())));
 
         let path = dir.join(&s.image_file);
-        if let (Ok(bytes), Ok((w, h))) = (std::fs::read(&path), image::image_dimensions(&path)) {
+        if !s.image_file.is_empty()
+            && let (Ok(bytes), Ok((w, h))) = (std::fs::read(&path), image::image_dimensions(&path))
+        {
             let (ew, eh) = fit_emu(w, h);
             let pic = Pic::new(&bytes).size(ew, eh);
             docx = docx.add_paragraph(Paragraph::new().add_run(Run::new().add_image(pic)));

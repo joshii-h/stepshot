@@ -114,9 +114,12 @@ fn step_page(doc: &mut PdfDocument, dir: &Path, s: &Step) -> PdfPage {
         y += 6.0;
     }
 
-    // Screenshot below the text (best effort — a bad image just leaves the page text-only).
+    // Screenshot below the text (best effort — a bad/absent image just leaves
+    // the page text-only, e.g. a manual step with no screenshot).
     let path = dir.join(&s.image_file);
-    if let Ok(bytes) = std::fs::read(&path) {
+    if !s.image_file.is_empty()
+        && let Ok(bytes) = std::fs::read(&path)
+    {
         let mut warnings = Vec::new();
         if let Ok(raw) = RawImage::decode_from_bytes(&bytes, &mut warnings) {
             let (iw, ih) = (raw.width as f32, raw.height as f32);

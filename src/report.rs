@@ -82,11 +82,15 @@ fn render_markdown(steps: &[Step], started: &str) -> String {
             Some(p) if !p.is_empty() => format!(" · `{}`", md_escape(p)),
             _ => String::new(),
         };
+        let image = if s.image_file.is_empty() {
+            String::new()
+        } else {
+            format!("![{step_label}]({})\n\n", s.image_file)
+        };
         out.push_str(&format!(
-            "## {step_label} — {}{app}\n\n*{}*\n\n![{step_label}]({})\n\n",
+            "## {step_label} — {}{app}\n\n*{}*\n\n{image}",
             s.time,
             md_escape(&s.describe()),
-            s.image_file
         ));
     }
     out
@@ -110,13 +114,20 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
     let t = crate::i18n::tr();
     let mut cards = String::new();
     for s in steps {
-        let src = if embed {
-            match fs::read(dir.join(&s.image_file)) {
-                Ok(bytes) => format!("data:image/png;base64,{}", base64(&bytes)),
-                Err(_) => html_escape(&s.image_file), // fallback: file reference
-            }
+        // A manual step may carry no screenshot — then render text only.
+        let img_tag = if s.image_file.is_empty() {
+            String::new()
         } else {
-            html_escape(&s.image_file)
+            let src = if embed {
+                match fs::read(dir.join(&s.image_file)) {
+                    Ok(bytes) => format!("data:image/png;base64,{}", base64(&bytes)),
+                    Err(_) => html_escape(&s.image_file), // fallback: file reference
+                }
+            } else {
+                html_escape(&s.image_file)
+            };
+            let alt = html_escape(&t.report_step.replace("{n}", &s.index.to_string()));
+            format!("\n    <img src=\"{src}\" alt=\"{alt}\" loading=\"lazy\">")
         };
         let meta_line = match &s.process {
             Some(p) if !p.is_empty() => {
@@ -128,15 +139,13 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
             r#"  <section class="step">
     <div class="head"><span class="num">{n}</span>
       <div><p class="desc">{desc}</p><p class="time">{meta_line}</p></div>
-    </div>
-    <img src="{src}" alt="{alt}" loading="lazy">
+    </div>{img_tag}
   </section>
 "#,
             n = s.index,
-            alt = html_escape(&t.report_step.replace("{n}", &s.index.to_string())),
             desc = html_escape(&s.describe()),
             meta_line = meta_line,
-            src = src,
+            img_tag = img_tag,
         ));
     }
 
@@ -210,6 +219,35 @@ pub(crate) fn base64(data: &[u8]) -> String {
     out
 }
 
+/// Minimal base64 decoder (standard alphabet, `=`/whitespace ignored). Returns
+/// `None` on an invalid character. Counterpart to [`base64`], used to decode the
+/// data-URI images the editor sends for manual steps.
+pub(crate) fn base64_decode(s: &str) -> Option<Vec<u8>> {
+    const A: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut lut = [255u8; 256];
+    for (i, &c) in A.iter().enumerate() {
+        lut[c as usize] = i as u8;
+    }
+    let (mut buf, mut bits) = (0u32, 0u32);
+    let mut out = Vec::with_capacity(s.len() / 4 * 3);
+    for &b in s.as_bytes() {
+        if matches!(b, b'=' | b'\n' | b'\r' | b' ' | b'\t') {
+            continue;
+        }
+        let v = lut[b as usize];
+        if v == 255 {
+            return None;
+        }
+        buf = (buf << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Some(out)
+}
+
 pub(crate) fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
         .replace('<', "&lt;")
@@ -240,6 +278,22 @@ mod tests {
         let enc = base64(&data);
         assert_eq!(enc.len(), data.len().div_ceil(3) * 4);
         assert_eq!(&enc[..8], "AAECAwQF");
+    }
+
+    #[test]
+    fn base64_decode_roundtrips_and_rejects_junk() {
+        for v in [
+            &b""[..],
+            b"f",
+            b"fo",
+            b"foo",
+            b"foobar",
+            &(0u8..=255).collect::<Vec<u8>>()[..],
+        ] {
+            assert_eq!(base64_decode(&base64(v)).unwrap(), v);
+        }
+        assert_eq!(base64_decode("Zm9v\nYmFy").unwrap(), b"foobar"); // whitespace ok
+        assert!(base64_decode("not base64!!").is_none());
     }
 
     #[test]

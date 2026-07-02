@@ -46,4 +46,6 @@ pub static STRINGS: Strings = Strings {
     edit_done: "Done",
     edit_applied: "Applied {n} step(s) — reloading…",
     edit_error: "Error",
+    edit_add_step: "Add step",
+    edit_manual_text: "Describe this step",
 };

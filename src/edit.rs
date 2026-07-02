@@ -267,6 +267,7 @@ fn build_page(dir: &Path) -> Result<String> {
 {cards}</main>
 <footer>
   <button id="apply" data-applied="{applied}" data-error="{error}">{apply}</button>
+  <button id="addstep" data-text="{manual_text}" data-del="{del}">＋ {add_step}</button>
   <button id="done">{done}</button>
   <span id="status"></span>
 </footer>
@@ -282,6 +283,9 @@ fn build_page(dir: &Path) -> Result<String> {
         done = html_escape(t.edit_done),
         applied = html_escape(t.edit_applied),
         error = html_escape(t.edit_error),
+        add_step = html_escape(t.edit_add_step),
+        manual_text = html_escape(t.edit_manual_text),
+        del = html_escape(t.edit_delete),
         css = EDITOR_CSS,
         cards = cards,
         js = EDITOR_JS,
@@ -324,6 +328,7 @@ const EDITOR_JS: &str = r#"
 
   function setupStep(card) {
     const shot = card.querySelector('.shot');
+    if (!shot) return; // manual (text-only) step — nothing to redact
     const img = shot.querySelector('img');
     const overlay = shot.querySelector('.overlay');
     let boxes = [];            // natural image-pixel [x,y,w,h]
@@ -409,20 +414,61 @@ const EDITOR_JS: &str = r#"
     renumber();
   });
 
+  // Insert a manual (text, optional image) step at the end.
+  const addBtn = document.getElementById('addstep');
+  addBtn.addEventListener('click', () => {
+    const card = document.createElement('section');
+    card.className = 'step manual';
+    card.dataset.manual = '1';
+    card.innerHTML =
+      '<div class="bar"><span class="num">+</span>' +
+      '<button type="button" class="mv up" title="▲">▲</button>' +
+      '<button type="button" class="mv down" title="▼">▼</button>' +
+      '<button type="button" class="del">' + addBtn.dataset.del + '</button></div>' +
+      '<input class="desc" placeholder="' + addBtn.dataset.text + '">' +
+      '<input class="mfile" type="file" accept="image/*">';
+    steps.appendChild(card);
+    renumber();
+    card.querySelector('.desc').focus();
+  });
+
+  function readAsDataURL(file) {
+    return new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(r.result);
+      r.onerror = reject;
+      r.readAsDataURL(file);
+    });
+  }
+
+  async function gather() {
+    const entries = [];
+    for (const card of steps.querySelectorAll('.step')) {
+      if (card.classList.contains('deleted')) continue;
+      if (card.dataset.manual) {
+        const text = card.querySelector('.desc').value.trim();
+        if (!text) continue; // skip empty manual steps
+        const entry = { text };
+        const file = card.querySelector('.mfile').files[0];
+        if (file) entry.image = await readAsDataURL(file);
+        entries.push(entry);
+      } else {
+        const ref = +card.dataset.ref;
+        const auto = card.dataset.auto;
+        const desc = card.querySelector('.desc').value;
+        const redact = JSON.parse(card.dataset.redact || '[]');
+        const entry = { ref, description: desc === auto ? null : desc };
+        if (redact.length) entry.redact = redact;
+        entries.push(entry);
+      }
+    }
+    return entries;
+  }
+
   const applyBtn = document.getElementById('apply');
   const status = document.getElementById('status');
   applyBtn.addEventListener('click', async () => {
-    const entries = [];
-    steps.querySelectorAll('.step').forEach(card => {
-      if (card.classList.contains('deleted')) return;
-      const ref = +card.dataset.ref;
-      const auto = card.dataset.auto;
-      const desc = card.querySelector('.desc').value;
-      const redact = JSON.parse(card.dataset.redact || '[]');
-      const entry = { ref, description: desc === auto ? null : desc };
-      if (redact.length) entry.redact = redact;
-      entries.push(entry);
-    });
+    const entries = await gather();
     status.textContent = '…';
     try {
       const res = await fetch('/apply?token=' + encodeURIComponent(token), {

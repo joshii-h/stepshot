@@ -147,7 +147,8 @@ session" opens the report as the native entry point. Each session also gains a
       edits straight back and rewrites the session in place** — no download, no
       manual `apply` step. Reachable from the tray ("Edit last session") or the
       CLI. (`stepshot apply` remains for scripting/CI.)
-- [ ] Insert manual steps (required text + optional image file copied in).
+- [x] Insert manual steps in the editor (**+ Add step**): required text +
+      optional image (file → copied in); rendered text-only when imageless.
 
 ### 0.5 — Capture polish
 - [x] Double-click merge: two rapid clicks of the same button within

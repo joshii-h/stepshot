@@ -13,18 +13,21 @@
 //!   "steps": [
 //!     { "ref": 2, "redact": [[x, y, w, h]] },
 //!     { "ref": 1, "description": "Custom text" },
-//!     { "ref": 3, "description": null }
+//!     { "ref": 3, "description": null },
+//!     { "text": "A manual step", "image": "data:image/png;base64,…" }
 //!   ]
 //! }
 //! ```
 //!
-//! `ref` is the original step index in `session.json`. `redact` boxes are in
-//! image-pixel coordinates. `description`: a string overrides the display text,
-//! `null` reverts to the auto text, and an absent key leaves it unchanged.
+//! A `ref` entry keeps an original step (index in `session.json`): `redact`
+//! boxes are image-pixel coordinates, and `description` overrides the text
+//! (`null` reverts to auto, absent leaves it). A `text` entry inserts a new
+//! manual step; its `image` is optional (a filesystem path, or a `data:` URI as
+//! the editor sends) — without one the step is text-only.
 
 use crate::config::Config;
 use crate::json::Json;
-use crate::model::Step;
+use crate::model::{Button, Step};
 use crate::report;
 use crate::session::{self, Session};
 use anyhow::{Context, Result};
@@ -88,12 +91,17 @@ enum DescEdit {
 
 /// One entry in the ordered edit plan.
 #[derive(Debug)]
-struct EditEntry {
-    /// Original step index (`ref` in edits.json) this entry keeps.
-    ref_index: usize,
-    description: DescEdit,
-    /// Image-pixel boxes to pixelate destructively.
-    redactions: Vec<[u32; 4]>,
+enum EditEntry {
+    /// Keep an original step (`ref`), optionally re-described and redacted.
+    Keep {
+        ref_index: usize,
+        description: DescEdit,
+        /// Image-pixel boxes to pixelate destructively.
+        redactions: Vec<[u32; 4]>,
+    },
+    /// A brand-new manual step: required text, optional image (a filesystem
+    /// path, or a `data:` URI as the editor sends it).
+    Manual { text: String, image: Option<String> },
 }
 
 /// The full ordered edit plan.
@@ -109,7 +117,7 @@ impl Edits {
             steps: sess
                 .steps
                 .iter()
-                .map(|s| EditEntry {
+                .map(|s| EditEntry::Keep {
                     ref_index: s.index,
                     description: DescEdit::Keep,
                     redactions: Vec::new(),
@@ -126,30 +134,53 @@ impl Edits {
             .context("edits.json: missing \"steps\" array")?;
         let mut steps = Vec::new();
         for e in arr {
-            let ref_index =
-                e.get("ref")
-                    .and_then(Json::as_i64)
-                    .context("edits.json: an entry is missing \"ref\"")? as usize;
-            let description = match e.get("description") {
-                None => DescEdit::Keep,
-                Some(Json::Null) => DescEdit::Clear,
-                Some(v) => match v.as_str() {
-                    Some(s) => DescEdit::Set(s.to_string()),
+            // A "ref" entry keeps an original; a "text" entry inserts a manual step.
+            if let Some(r) = e.get("ref").and_then(Json::as_i64) {
+                let description = match e.get("description") {
                     None => DescEdit::Keep,
-                },
-            };
-            let redactions = e
-                .get("redact")
-                .and_then(Json::as_array)
-                .map(|a| a.iter().filter_map(box_from_json).collect())
-                .unwrap_or_default();
-            steps.push(EditEntry {
-                ref_index,
-                description,
-                redactions,
-            });
+                    Some(Json::Null) => DescEdit::Clear,
+                    Some(v) => match v.as_str() {
+                        Some(s) => DescEdit::Set(s.to_string()),
+                        None => DescEdit::Keep,
+                    },
+                };
+                let redactions = e
+                    .get("redact")
+                    .and_then(Json::as_array)
+                    .map(|a| a.iter().filter_map(box_from_json).collect())
+                    .unwrap_or_default();
+                steps.push(EditEntry::Keep {
+                    ref_index: r as usize,
+                    description,
+                    redactions,
+                });
+            } else if let Some(text) = e.get("text").and_then(Json::as_str) {
+                let image = e.get("image").and_then(Json::as_str).map(str::to_string);
+                steps.push(EditEntry::Manual {
+                    text: text.to_string(),
+                    image,
+                });
+            } else {
+                anyhow::bail!("edits.json: an entry has neither \"ref\" nor \"text\"");
+            }
         }
         Ok(Edits { steps })
+    }
+}
+
+/// Decode a manual step's image: a `data:` URI (as the editor sends) or a
+/// filesystem path. Normalized to RGBA.
+fn load_manual_image(spec: &str) -> Result<RgbaImage> {
+    if let Some(rest) = spec.strip_prefix("data:") {
+        let payload = rest.split_once(',').map(|(_, p)| p).unwrap_or(rest);
+        let bytes = report::base64_decode(payload).context("invalid base64 image data")?;
+        Ok(image::load_from_memory(&bytes)
+            .context("could not decode image data")?
+            .to_rgba8())
+    } else {
+        Ok(image::open(spec)
+            .with_context(|| format!("could not open image {spec}"))?
+            .to_rgba8())
     }
 }
 
@@ -206,28 +237,62 @@ fn apply_plan(session_dir: &Path, sess: &Session, edits: &Edits) -> Result<usize
     let mut final_steps = Vec::with_capacity(edits.steps.len());
     let mut images: Vec<(String, RgbaImage)> = Vec::with_capacity(edits.steps.len());
     for (pos, e) in edits.steps.iter().enumerate() {
-        let src = *by_index
-            .get(&e.ref_index)
-            .with_context(|| format!("edits.json references unknown step {}", e.ref_index))?;
         let new_index = pos + 1;
         let new_name = format!("step-{new_index:03}.png");
 
-        let mut img = image::open(session_dir.join(&src.image_file))
-            .with_context(|| format!("could not open {}", src.image_file))?
-            .to_rgba8();
-        for b in &e.redactions {
-            pixelate(&mut img, b[0], b[1], b[2], b[3]);
-        }
-        images.push((new_name.clone(), img));
+        let step = match e {
+            EditEntry::Keep {
+                ref_index,
+                description,
+                redactions,
+            } => {
+                let src = *by_index
+                    .get(ref_index)
+                    .with_context(|| format!("edits.json references unknown step {ref_index}"))?;
+                let mut img = image::open(session_dir.join(&src.image_file))
+                    .with_context(|| format!("could not open {}", src.image_file))?
+                    .to_rgba8();
+                for b in redactions {
+                    pixelate(&mut img, b[0], b[1], b[2], b[3]);
+                }
+                images.push((new_name.clone(), img));
 
-        let mut step = src.clone();
-        step.index = new_index;
-        step.image_file = new_name;
-        match &e.description {
-            DescEdit::Keep => {}
-            DescEdit::Clear => step.description_override = None,
-            DescEdit::Set(s) => step.description_override = Some(s.clone()),
-        }
+                let mut step = src.clone();
+                step.index = new_index;
+                step.image_file = new_name;
+                match description {
+                    DescEdit::Keep => {}
+                    DescEdit::Clear => step.description_override = None,
+                    DescEdit::Set(s) => step.description_override = Some(s.clone()),
+                }
+                step
+            }
+            EditEntry::Manual { text, image } => {
+                // An image is optional; without one the step is text-only.
+                let image_file = match image {
+                    Some(spec) => {
+                        let img = load_manual_image(spec)?;
+                        images.push((new_name.clone(), img));
+                        new_name
+                    }
+                    None => String::new(),
+                };
+                Step {
+                    index: new_index,
+                    button: Button::Left,
+                    time: String::new(),
+                    image_file,
+                    window_title: None,
+                    process: None,
+                    element: None,
+                    element_box: None,
+                    description_override: Some(text.clone()),
+                    is_screen: false,
+                    double: false,
+                    drag: false,
+                }
+            }
+        };
         final_steps.push(step);
     }
 
@@ -309,15 +374,53 @@ mod tests {
         )
         .unwrap();
         assert_eq!(e.steps.len(), 3); // an omitted original = deleted
-        assert_eq!(e.steps[0].ref_index, 2);
-        assert_eq!(e.steps[0].redactions, vec![[1, 2, 3, 4], [5, 6, 7, 8]]);
-        assert_eq!(e.steps[0].description, DescEdit::Keep);
-        assert_eq!(e.steps[1].description, DescEdit::Set("hi".into()));
-        assert_eq!(e.steps[2].description, DescEdit::Clear);
+        match &e.steps[0] {
+            EditEntry::Keep {
+                ref_index,
+                description,
+                redactions,
+            } => {
+                assert_eq!(*ref_index, 2);
+                assert_eq!(*redactions, vec![[1, 2, 3, 4], [5, 6, 7, 8]]);
+                assert_eq!(*description, DescEdit::Keep);
+            }
+            _ => panic!("expected a Keep entry"),
+        }
+        assert!(
+            matches!(&e.steps[1], EditEntry::Keep { description: DescEdit::Set(s), .. } if s == "hi")
+        );
+        assert!(matches!(
+            &e.steps[2],
+            EditEntry::Keep {
+                description: DescEdit::Clear,
+                ..
+            }
+        ));
     }
 
     #[test]
-    fn rejects_entry_without_ref() {
+    fn parses_manual_step() {
+        let e = Edits::parse(
+            r#"{ "steps": [
+                 { "ref": 1 },
+                 { "text": "Open the terminal", "image": "data:image/png;base64,AAAA" },
+                 { "text": "Type your name" }
+               ] }"#,
+        )
+        .unwrap();
+        assert_eq!(e.steps.len(), 3);
+        assert!(matches!(&e.steps[0], EditEntry::Keep { ref_index: 1, .. }));
+        assert!(
+            matches!(&e.steps[1], EditEntry::Manual { text, image: Some(img) }
+                if text == "Open the terminal" && img.starts_with("data:"))
+        );
+        assert!(
+            matches!(&e.steps[2], EditEntry::Manual { text, image: None } if text == "Type your name")
+        );
+    }
+
+    #[test]
+    fn rejects_entry_with_neither_ref_nor_text() {
         assert!(Edits::parse(r#"{ "steps": [ { "redact": [] } ] }"#).is_err());
         assert!(Edits::parse(r#"{ "nope": [] }"#).is_err());
     }

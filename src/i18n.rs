@@ -116,6 +116,8 @@ pub struct Strings {
     pub edit_done: &'static str,
     pub edit_applied: &'static str, // "Applied {n} step(s) — reloading…"
     pub edit_error: &'static str,
+    pub edit_add_step: &'static str,
+    pub edit_manual_text: &'static str, // placeholder for a manual step's text
 }
 
 /// Maps a language to its string table (each defined in its own `i18n/*.rs`).
