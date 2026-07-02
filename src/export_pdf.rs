@@ -254,6 +254,7 @@ mod tests {
             process: None,
             element: Some("button “Save”".into()),
             element_box: None,
+            description_override: None,
             is_screen: false,
             double: false,
         }];

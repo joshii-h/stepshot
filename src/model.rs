@@ -66,6 +66,10 @@ pub struct Step {
     /// clicked element in the editor. `None` for screen captures or when no box
     /// was resolved.
     pub element_box: Option<[u32; 4]>,
+    /// Editor-supplied replacement for the display text. When set, it wins over
+    /// the auto-generated description; the auto text stays available via
+    /// [`Step::auto_describe`] so an override can be reverted.
+    pub description_override: Option<String>,
     /// The screenshot shows the whole screen, not a single window (panel,
     /// desktop or popup-menu click).
     pub is_screen: bool,
@@ -85,8 +89,18 @@ impl Step {
         }
     }
 
-    /// One-line description of what happened in this step (localized).
+    /// The effective one-line description: an editor override if present,
+    /// otherwise the auto-generated text.
     pub fn describe(&self) -> String {
+        match &self.description_override {
+            Some(s) if !s.is_empty() => s.clone(),
+            _ => self.auto_describe(),
+        }
+    }
+
+    /// The auto-generated one-line description (localized), ignoring any
+    /// override — the source text kept in `session.json` for revert.
+    pub fn auto_describe(&self) -> String {
         let t = crate::i18n::tr();
         let verb = self.action_label();
         let action = match &self.element {
@@ -130,6 +144,7 @@ mod tests {
             process: None,
             element: element.map(String::from),
             element_box: None,
+            description_override: None,
             is_screen: false,
             double: false,
         }
@@ -162,6 +177,21 @@ mod tests {
             s.describe(),
             "Double click on button “Save” in window “Editor”"
         );
+    }
+
+    #[test]
+    fn override_wins_over_auto_but_keeps_it() {
+        let mut s = step(Some("Editor"), Some("button “Save”"));
+        s.description_override = Some("Click Save to store the file".into());
+        assert_eq!(s.describe(), "Click Save to store the file");
+        // The auto text is still available for revert.
+        assert_eq!(
+            s.auto_describe(),
+            "Left click on button “Save” in window “Editor”"
+        );
+        // An empty override falls back to auto.
+        s.description_override = Some(String::new());
+        assert_eq!(s.describe(), s.auto_describe());
     }
 
     #[test]

@@ -129,15 +129,21 @@ edits to disk and regenerates every enabled export. A tray entry "Edit last
 session" opens the report as the native entry point. Each session also gains a
 `session.json` (source of truth) so `apply` can rebuild all formats.
 
-- [ ] `session.json` per session + `stepshot apply` (rebuild all enabled formats).
-- [ ] Redaction: **destructive** pixelation of `step-NNN.png` (original pixels
-      gone). Regions picked by dragging a box in the editor, or one-click on the
-      **clicked element's AT-SPI box** (extents stored at capture time).
-- [ ] Edit step descriptions (override the display text; keep the auto-generated
-      one in `session.json` for revert).
-- [ ] Delete steps (renumber + rename the PNGs; gap-free output).
+- [x] `session.json` per session (source of truth) + `stepshot apply
+      <session-dir> [edits.json]` — rebuilds every enabled format; with no
+      edits.json it just regenerates. The clicked element's AT-SPI box is stored
+      at capture time (in image-pixel coords) for one-click redaction.
+- [x] **apply engine** for the edits below (driven by an `edits.json`; the
+      in-report editor that *produces* it is the next step):
+  - [x] Redaction: **destructive** pixelation of `step-NNN.png` (original pixels
+        gone) for any image-pixel box.
+  - [x] Edit step descriptions (override the display text; the auto-generated
+        one stays in `session.json` for revert).
+  - [x] Delete steps + reorder (renumber and rewrite the PNGs; gap-free output).
+- [ ] **In-report editor** (`report.html` gains the JS editor: draw redaction
+      boxes / one-click the element box, edit text, delete, reorder → download
+      `edits.json`) + a tray "Edit last session" entry point.
 - [ ] Insert manual steps (required text + optional image file copied in).
-- [ ] Reorder steps (cheap in the editor; BetterStepsRecorder/OpenSteps ship it).
 
 ### 0.5 — Capture polish
 - [x] Double-click merge: two rapid clicks of the same button within

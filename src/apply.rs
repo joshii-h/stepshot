@@ -1,0 +1,311 @@
+//! `stepshot apply <session-dir> [edits.json]` — the editing engine.
+//!
+//! Rebuilds a recorded session from its `session.json` source-of-truth, applying
+//! the edits the in-report editor produced. With no `edits.json` it simply
+//! regenerates every enabled export from the session as-is.
+//!
+//! Edits are one ordered list of entries — that single shape expresses delete
+//! (omit an original), reorder (position in the list) and renumber (list index),
+//! plus per-step description override and destructive redaction:
+//!
+//! ```json
+//! {
+//!   "steps": [
+//!     { "ref": 2, "redact": [[x, y, w, h]] },
+//!     { "ref": 1, "description": "Custom text" },
+//!     { "ref": 3, "description": null }
+//!   ]
+//! }
+//! ```
+//!
+//! `ref` is the original step index in `session.json`. `redact` boxes are in
+//! image-pixel coordinates. `description`: a string overrides the display text,
+//! `null` reverts to the auto text, and an absent key leaves it unchanged.
+
+use crate::config::Config;
+use crate::json::Json;
+use crate::model::Step;
+use crate::report;
+use crate::session::{self, Session};
+use anyhow::{Context, Result};
+use image::RgbaImage;
+use std::collections::HashMap;
+use std::path::Path;
+
+/// Destructively mosaic a rectangular region so the original detail is gone.
+/// The block size scales with the region, so small boxes still get obscured.
+pub fn pixelate(img: &mut RgbaImage, x: u32, y: u32, w: u32, h: u32) {
+    let (iw, ih) = img.dimensions();
+    if x >= iw || y >= ih || w == 0 || h == 0 {
+        return;
+    }
+    let x1 = (x + w).min(iw);
+    let y1 = (y + h).min(ih);
+    let block = ((x1 - x).min(y1 - y) / 6).clamp(6, 40);
+
+    let mut by = y;
+    while by < y1 {
+        let mut bx = x;
+        while bx < x1 {
+            let cx1 = (bx + block).min(x1);
+            let cy1 = (by + block).min(y1);
+            let (mut r, mut g, mut b, mut a, mut n) = (0u64, 0u64, 0u64, 0u64, 0u64);
+            for yy in by..cy1 {
+                for xx in bx..cx1 {
+                    let p = img.get_pixel(xx, yy).0;
+                    r += p[0] as u64;
+                    g += p[1] as u64;
+                    b += p[2] as u64;
+                    a += p[3] as u64;
+                    n += 1;
+                }
+            }
+            // The cell always has ≥1 pixel (cx1 > bx, cy1 > by); max(1) guards
+            // the impossible zero without a division-by-zero branch.
+            let n = n.max(1);
+            let avg = image::Rgba([(r / n) as u8, (g / n) as u8, (b / n) as u8, (a / n) as u8]);
+            for yy in by..cy1 {
+                for xx in bx..cx1 {
+                    img.put_pixel(xx, yy, avg);
+                }
+            }
+            bx += block;
+        }
+        by += block;
+    }
+}
+
+/// What to do with a step's display text.
+#[derive(Debug, PartialEq)]
+enum DescEdit {
+    /// Leave whatever the session already has.
+    Keep,
+    /// Drop any override, reverting to the auto-generated text.
+    Clear,
+    /// Replace with this text.
+    Set(String),
+}
+
+/// One entry in the ordered edit plan.
+#[derive(Debug)]
+struct EditEntry {
+    /// Original step index (`ref` in edits.json) this entry keeps.
+    ref_index: usize,
+    description: DescEdit,
+    /// Image-pixel boxes to pixelate destructively.
+    redactions: Vec<[u32; 4]>,
+}
+
+/// The full ordered edit plan.
+#[derive(Debug)]
+struct Edits {
+    steps: Vec<EditEntry>,
+}
+
+impl Edits {
+    /// The no-op plan: keep every step, in order, unchanged.
+    fn identity(sess: &Session) -> Edits {
+        Edits {
+            steps: sess
+                .steps
+                .iter()
+                .map(|s| EditEntry {
+                    ref_index: s.index,
+                    description: DescEdit::Keep,
+                    redactions: Vec::new(),
+                })
+                .collect(),
+        }
+    }
+
+    fn parse(text: &str) -> Result<Edits> {
+        let j = Json::parse(text).map_err(|e| anyhow::anyhow!("edits.json: {e}"))?;
+        let arr = j
+            .get("steps")
+            .and_then(Json::as_array)
+            .context("edits.json: missing \"steps\" array")?;
+        let mut steps = Vec::new();
+        for e in arr {
+            let ref_index =
+                e.get("ref")
+                    .and_then(Json::as_i64)
+                    .context("edits.json: an entry is missing \"ref\"")? as usize;
+            let description = match e.get("description") {
+                None => DescEdit::Keep,
+                Some(Json::Null) => DescEdit::Clear,
+                Some(v) => match v.as_str() {
+                    Some(s) => DescEdit::Set(s.to_string()),
+                    None => DescEdit::Keep,
+                },
+            };
+            let redactions = e
+                .get("redact")
+                .and_then(Json::as_array)
+                .map(|a| a.iter().filter_map(box_from_json).collect())
+                .unwrap_or_default();
+            steps.push(EditEntry {
+                ref_index,
+                description,
+                redactions,
+            });
+        }
+        Ok(Edits { steps })
+    }
+}
+
+fn box_from_json(j: &Json) -> Option<[u32; 4]> {
+    let v: Vec<u32> = j
+        .as_array()?
+        .iter()
+        .filter_map(Json::as_i64)
+        .map(|n| n.max(0) as u32)
+        .collect();
+    (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
+}
+
+/// Apply `edits_path` (or the identity plan) to the session in `session_dir`,
+/// then rewrite `session.json` and regenerate every enabled export.
+pub fn run(session_dir: &Path, edits_path: Option<&Path>) -> Result<()> {
+    let config = Config::load();
+    let loaded = session::load_session(session_dir)?;
+    // Render the rebuilt report in the language the session was recorded in.
+    crate::i18n::init_lang(&loaded.language);
+    let sess = loaded.session;
+
+    let edits = match edits_path {
+        Some(p) => {
+            let text = std::fs::read_to_string(p)
+                .with_context(|| format!("could not read {}", p.display()))?;
+            Edits::parse(&text)?
+        }
+        None => Edits::identity(&sess),
+    };
+
+    let by_index: HashMap<usize, &Step> = sess.steps.iter().map(|s| (s.index, s)).collect();
+
+    // Build the final steps and their (redacted) images entirely in memory
+    // first, so renumbering/reordering never clobbers a source file mid-flight.
+    let mut final_steps = Vec::with_capacity(edits.steps.len());
+    let mut images: Vec<(String, RgbaImage)> = Vec::with_capacity(edits.steps.len());
+    for (pos, e) in edits.steps.iter().enumerate() {
+        let src = *by_index
+            .get(&e.ref_index)
+            .with_context(|| format!("edits.json references unknown step {}", e.ref_index))?;
+        let new_index = pos + 1;
+        let new_name = format!("step-{new_index:03}.png");
+
+        let mut img = image::open(session_dir.join(&src.image_file))
+            .with_context(|| format!("could not open {}", src.image_file))?
+            .to_rgba8();
+        for b in &e.redactions {
+            pixelate(&mut img, b[0], b[1], b[2], b[3]);
+        }
+        images.push((new_name.clone(), img));
+
+        let mut step = src.clone();
+        step.index = new_index;
+        step.image_file = new_name;
+        match &e.description {
+            DescEdit::Keep => {}
+            DescEdit::Clear => step.description_override = None,
+            DescEdit::Set(s) => step.description_override = Some(s.clone()),
+        }
+        final_steps.push(step);
+    }
+
+    // Swap the images on disk: drop every old step-*.png, write the new set.
+    remove_step_images(session_dir)?;
+    for (name, img) in &images {
+        img.save(session_dir.join(name))
+            .with_context(|| format!("could not write {name}"))?;
+    }
+
+    let rebuilt = Session {
+        dir: session_dir.to_path_buf(),
+        started: sess.started,
+        steps: final_steps,
+    };
+    session::write_session_json(&rebuilt);
+    report::write_final(
+        session_dir,
+        &rebuilt.steps,
+        &rebuilt.started,
+        &config.export,
+    )
+    .context("could not rebuild reports")?;
+
+    println!(
+        "Applied edits → {} step(s) in {}",
+        rebuilt.steps.len(),
+        session_dir.display()
+    );
+    Ok(())
+}
+
+/// Delete every `step-*.png` in the folder (the new set is written afterwards).
+fn remove_step_images(dir: &Path) -> Result<()> {
+    for entry in std::fs::read_dir(dir)
+        .with_context(|| format!("could not read {}", dir.display()))?
+        .flatten()
+    {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("step-") && name.ends_with(".png") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pixelate_averages_into_uniform_blocks() {
+        // A gradient so neighbouring pixels differ before redaction.
+        let mut img = RgbaImage::from_fn(20, 20, |x, y| {
+            image::Rgba([(x * 10) as u8, (y * 10) as u8, 0, 255])
+        });
+        pixelate(&mut img, 0, 0, 12, 12);
+        // block size = min(12,12)/6 = 2 → clamped up to 6: cells of 6×6 px.
+        assert_eq!(img.get_pixel(0, 0), img.get_pixel(5, 5)); // same block, now uniform
+        assert_eq!(img.get_pixel(1, 4), img.get_pixel(4, 1));
+        // Untouched outside the region.
+        assert_eq!(*img.get_pixel(15, 15), image::Rgba([150, 150, 0, 255]));
+    }
+
+    #[test]
+    fn pixelate_clamps_to_image_bounds() {
+        let mut img = RgbaImage::from_pixel(10, 10, image::Rgba([1, 2, 3, 255]));
+        // Region partly (and fully) off-image must not panic.
+        pixelate(&mut img, 8, 8, 50, 50);
+        pixelate(&mut img, 100, 100, 5, 5);
+    }
+
+    #[test]
+    fn parses_reorder_delete_override_redact() {
+        let e = Edits::parse(
+            r#"{
+              "steps": [
+                { "ref": 2, "redact": [[1, 2, 3, 4], [5, 6, 7, 8]] },
+                { "ref": 1, "description": "hi" },
+                { "ref": 3, "description": null }
+              ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(e.steps.len(), 3); // an omitted original = deleted
+        assert_eq!(e.steps[0].ref_index, 2);
+        assert_eq!(e.steps[0].redactions, vec![[1, 2, 3, 4], [5, 6, 7, 8]]);
+        assert_eq!(e.steps[0].description, DescEdit::Keep);
+        assert_eq!(e.steps[1].description, DescEdit::Set("hi".into()));
+        assert_eq!(e.steps[2].description, DescEdit::Clear);
+    }
+
+    #[test]
+    fn rejects_entry_without_ref() {
+        assert!(Edits::parse(r#"{ "steps": [ { "redact": [] } ] }"#).is_err());
+        assert!(Edits::parse(r#"{ "nope": [] }"#).is_err());
+    }
+}

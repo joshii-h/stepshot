@@ -73,9 +73,13 @@ fn step_json(step: &Step) -> Json {
         ("process", step.process.clone().into()),
         ("element", step.element.clone().into()),
         ("element_box", element_box),
-        // The auto-generated description. The editor may override the display
-        // text, but this original stays here so an override can be reverted.
-        ("description", step.describe().into()),
+        // The auto-generated text stays here so an override can be reverted…
+        ("description", step.auto_describe().into()),
+        // …while the editor's replacement (if any) rides alongside it.
+        (
+            "description_override",
+            step.description_override.clone().into(),
+        ),
     ])
 }
 
@@ -88,6 +92,81 @@ pub fn write_session_json(s: &Session) {
     if let Err(e) = std::fs::write(s.dir.join("session.json"), session_json(s)) {
         eprintln!("[stepshot] could not write session.json: {e}");
     }
+}
+
+/// A session loaded back from its `session.json`, plus the language it was
+/// recorded in (so `apply` can render in the captured locale).
+pub struct LoadedSession {
+    pub session: Session,
+    pub language: String,
+}
+
+/// Read `session.json` from a session folder back into a [`Session`].
+pub fn load_session(dir: &Path) -> Result<LoadedSession> {
+    let path = dir.join("session.json");
+    let text = std::fs::read_to_string(&path)
+        .with_context(|| format!("could not read {}", path.display()))?;
+    let j = Json::parse(&text).map_err(|e| anyhow::anyhow!("{}: {e}", path.display()))?;
+    let language = j
+        .get("language")
+        .and_then(Json::as_str)
+        .unwrap_or("en")
+        .to_string();
+    let started = j
+        .get("started")
+        .and_then(Json::as_str)
+        .unwrap_or("")
+        .to_string();
+    let steps_json = j
+        .get("steps")
+        .and_then(Json::as_array)
+        .context("session.json has no \"steps\" array")?;
+    let steps = steps_json
+        .iter()
+        .map(step_from_json)
+        .collect::<Result<_>>()?;
+    Ok(LoadedSession {
+        session: Session {
+            dir: dir.to_path_buf(),
+            started,
+            steps,
+        },
+        language,
+    })
+}
+
+fn step_from_json(j: &Json) -> Result<Step> {
+    let index = j
+        .get("index")
+        .and_then(Json::as_i64)
+        .context("step missing \"index\"")? as usize;
+    let button = match j.get("button").and_then(Json::as_str) {
+        Some("right") => Button::Right,
+        Some("middle") => Button::Middle,
+        _ => Button::Left,
+    };
+    let opt_str = |k: &str| j.get(k).and_then(Json::as_str).map(str::to_string);
+    let element_box = j.get("element_box").and_then(Json::as_array).and_then(|a| {
+        let v: Vec<u32> = a
+            .iter()
+            .filter_map(Json::as_i64)
+            .map(|n| n.max(0) as u32)
+            .collect();
+        (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
+    });
+    Ok(Step {
+        index,
+        button,
+        time: opt_str("time").unwrap_or_default(),
+        image_file: opt_str("image").unwrap_or_default(),
+        window_title: opt_str("window_title"),
+        process: opt_str("process"),
+        element: opt_str("element"),
+        element_box,
+        description_override: opt_str("description_override"),
+        is_screen: j.get("is_screen").and_then(Json::as_bool).unwrap_or(false),
+        double: j.get("double").and_then(Json::as_bool).unwrap_or(false),
+    })
 }
 
 /// Map an AT-SPI element box (screen coords) into image-pixel coordinates using
@@ -212,6 +291,7 @@ pub fn capture_step(
         process: cap.process,
         element,
         element_box,
+        description_override: None,
         is_screen: cap.is_screen,
         double: false,
     })
@@ -301,6 +381,7 @@ mod tests {
             process: None,
             element: None,
             element_box: None,
+            description_override: None,
             is_screen,
             double: false,
         }
@@ -403,5 +484,35 @@ mod tests {
             st.get("description").and_then(Json::as_str),
             Some("Left click in window “Editor”")
         );
+    }
+
+    #[test]
+    fn session_json_load_roundtrips_steps() {
+        let mut a = step(false, Some("Editor"));
+        a.process = Some("kitty".into());
+        a.element_box = Some([5, 6, 7, 8]);
+        a.description_override = Some("custom".into());
+        let mut b = step(true, None);
+        b.button = Button::Right;
+        b.double = true;
+        b.index = 2;
+        let sess = Session {
+            dir: PathBuf::from("/tmp/x"),
+            started: "2026-07-02 13:00:00".into(),
+            steps: vec![a, b],
+        };
+        let text = session_json(&sess);
+        // Reload from an in-memory copy (load_session reads a file, so mirror it).
+        let j = Json::parse(&text).unwrap();
+        let steps = j.get("steps").and_then(Json::as_array).unwrap();
+        let s0 = step_from_json(&steps[0]).unwrap();
+        let s1 = step_from_json(&steps[1]).unwrap();
+        assert_eq!(s0.process.as_deref(), Some("kitty"));
+        assert_eq!(s0.element_box, Some([5, 6, 7, 8]));
+        assert_eq!(s0.description_override.as_deref(), Some("custom"));
+        assert_eq!(s0.describe(), "custom"); // override wins on reload
+        assert_eq!(s1.button, Button::Right);
+        assert!(s1.double && s1.is_screen);
+        assert_eq!(s1.index, 2);
     }
 }

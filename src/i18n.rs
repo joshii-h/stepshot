@@ -124,6 +124,13 @@ pub fn init() {
     let _ = CURRENT.set(strings_for(Lang::detect()));
 }
 
+/// Force a specific language by locale/code — used by `stepshot apply` to render
+/// a rebuilt report in the language the session was recorded in. First-wins,
+/// like [`init`].
+pub fn init_lang(code: &str) {
+    let _ = CURRENT.set(strings_for(Lang::from_locale(code)));
+}
+
 /// The active string table (English until [`init`] runs).
 pub fn tr() -> &'static Strings {
     CURRENT.get().copied().unwrap_or(&en::STRINGS)

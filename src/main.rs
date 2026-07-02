@@ -7,6 +7,7 @@
 
 mod a11y;
 mod annotate;
+mod apply;
 mod capture;
 mod config;
 mod cursor;
@@ -44,9 +45,14 @@ const USAGE: &str = "\
 stepshot — step recorder for KDE/Wayland (tray app)
 
 Usage: stepshot [OUTPUT_DIR]
+       stepshot apply <SESSION_DIR> [EDITS_JSON]
 
 Arguments:
   OUTPUT_DIR   base folder for sessions (default: ~/Pictures/stepshot)
+
+Commands:
+  apply        rebuild a session's reports, applying an editor's edits.json
+               (or, with no edits.json, just regenerate every enabled export)
 
 Options:
   -h, --help       print this help
@@ -65,6 +71,18 @@ fn main() -> Result<()> {
         }
         Some("--write-config") => {
             return write_config();
+        }
+        Some("apply") => {
+            let mut rest = std::env::args().skip(2);
+            let Some(dir) = rest.next() else {
+                eprintln!("usage: stepshot apply <SESSION_DIR> [EDITS_JSON]");
+                std::process::exit(2);
+            };
+            let edits = rest.next();
+            return apply::run(
+                std::path::Path::new(&dir),
+                edits.as_deref().map(std::path::Path::new),
+            );
         }
         Some(flag) if flag.starts_with('-') => {
             eprintln!("unknown option: {flag}\n\n{USAGE}");
