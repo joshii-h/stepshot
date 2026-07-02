@@ -147,13 +147,13 @@ session" opens the report as the native entry point. Each session also gains a
 - [ ] Drag & drop as a step type (press → release at different points).
 - [ ] Process name (in addition to the window title) in the step metadata.
 
-### 0.6 — Configuration & export selection
-- [ ] Config file (`~/.config/stepshot/config.toml`) — stepshot currently has
-      zero persistent settings.
-- [ ] Marker style: color, opacity, size (defaults = the current translucent
+### 0.6 — Configuration & export selection (shipped)
+- [x] Config file (`~/.config/stepshot/config.toml`) — dependency-free
+      TOML-subset parser; `--write-config` writes a commented starter.
+- [x] Marker style: color, opacity, size (defaults = the current translucent
       yellow highlight).
-- [ ] Default output folder and capture preferences.
-- [ ] **Export selection**: `[export] formats = […]` — the user picks which
+- [x] Default output folder (`[general] output_dir`, `~` expanded; CLI wins).
+- [x] **Export selection**: `[export] formats = […]` — the user picks which
       formats get written (default: all available). Honored by both the
       recording loop and `stepshot apply`.
 
