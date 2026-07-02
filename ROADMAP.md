@@ -115,14 +115,38 @@ Before it lands: functional testing on a live Windows desktop.
 - [x] Cross-platform main loop selecting the backend by `cfg`.
 - [ ] Live-desktop testing + polishing (DPI/scale, balloon timing, marker fit).
 
+### 0.4 — Step editing & redaction
+The clearest learning from the wider step-recorder field (BetterStepsRecorder,
+OpenSteps, PSR++ — all of which ship an editor): the most-wanted post-capture
+ability is fixing a recording without re-recording it — especially removing or
+blurring something sensitive before sharing.
+- [ ] Redaction: blur/pixelate sensitive regions of a screenshot before export.
+- [ ] Edit step descriptions after recording.
+- [ ] Delete individual steps and re-export the reports.
+- [ ] Insert manual steps (custom text, optional screenshot).
+
+### 0.5 — Capture polish
+- [ ] Double-click merge: two rapid clicks at the same spot become one
+      “double click” step instead of two near-identical ones.
+- [ ] Pause/resume from the tray menu.
+- [ ] Click filtering (e.g. ignore configurable buttons).
+- [ ] Drag & drop as a step type (press → release at different points).
+- [ ] Process name (in addition to the window title) in the step metadata.
+
+### 0.6 — Configuration
+- [ ] Config file (`~/.config/stepshot/config.toml`) — stepshot currently has
+      zero persistent settings.
+- [ ] Marker style: color, opacity, size (defaults = the current translucent
+      yellow highlight).
+- [ ] Default output folder and capture preferences.
+
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see
   [#1](https://github.com/joshii-h/stepshot/issues/1); I don't have a Mac running
   a current macOS to develop/test on, so this needs an external contributor.
 - GNOME backend (portal screenshot, AT-SPI already shared).
-- Pause/resume, click filtering, keyboard-step capture.
-- Redaction / blur of sensitive regions before export.
-- More languages (the i18n layer is built for it).
+- Keyboard-step capture (privacy-sensitive; needs a careful, summarized design).
+- More languages (the i18n layer is built for it; EN/DE/FR/ES/IT ship today).
 
 ## Non-goals
 
