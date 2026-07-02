@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  checks: write # push runs report results as a check run
   issues: write # scheduled runs open an issue when an advisory hits
 
 jobs:
