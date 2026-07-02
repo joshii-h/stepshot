@@ -20,7 +20,8 @@ lives in the system tray so a single binary does the whole job.
 - **Per-window capture** — the active window by default; the whole screen only
   when the click doesn't land in it (panel, desktop, popup menus — otherwise
   the clicked thing wouldn't be in the picture).
-- **Visible click** — the real cursor plus a drawn marker land in the image.
+- **Visible click** — the real cursor plus a translucent yellow highlight land
+  in the image; the highlight is see-through, so text under it stays readable.
 - **Element-level description** — “Left click on button ‘Save’ in window …”,
   resolved from the accessibility tree (AT-SPI on Linux, UI Automation on
   Windows), with a graceful fall-back to the window level.

@@ -24,7 +24,8 @@ It lives in the system tray; you start and stop recording from there.
   don't land in the active window (panel, start menu, desktop) or hit a **popup
   menu** (a separate Wayland surface) get a **full-screen capture** instead, so
   what you clicked is always in the picture.
-- **Click marker** + the real mouse cursor baked into the image (KWin `include-cursor`).
+- **Click marker**: a translucent yellow highlight — text under it stays
+  readable — plus the real mouse cursor baked into the image (KWin `include-cursor`).
 - **Own clicks stay out**: the clicks that operate stepshot's tray menu
   (start/stop/quit) are not recorded as steps.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
