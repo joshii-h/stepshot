@@ -170,8 +170,8 @@ or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOC
 export (roadmap milestone 0.2) has already shipped; in short, next up:
 
 - **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3);
-  an implementation exists on the `feature/windows-backend` branch (compiles in CI,
-  needs a rebase onto current main and runtime testing on Windows)
+  implemented on the `feature/windows-backend` branch, kept in sync with main and
+  compiled in CI — what's left is runtime testing on a real Windows machine
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)

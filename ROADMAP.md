@@ -100,18 +100,19 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
       `--version`, weekly `cargo audit` in CI, unit tests for the pure helpers.
 
 ### 0.3 — Windows backend
-Drafted on the [`feature/windows-backend`](https://github.com/joshii-h/stepshot/tree/feature/windows-backend)
-branch (`platform.rs` traits + `src/win/`, compiles in a Windows CI job). Still
-to do before it lands: rebase onto current `main` (full-screen capture,
-stop-gesture trim, hotplug, `is_screen` model change) and runtime testing on a
-real Windows machine.
-- [ ] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
-- [ ] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
-- [ ] Cursor + window geometry (`GetCursorPos`, `GetForegroundWindow`,
-      `GetWindowRect`).
-- [ ] Element names via UI Automation (`ElementFromPoint`).
-- [ ] Tray via `Shell_NotifyIcon`.
-- [ ] Cross-platform main loop selecting the backend by `cfg`.
+Implemented on the [`feature/windows-backend`](https://github.com/joshii-h/stepshot/tree/feature/windows-backend)
+branch (`platform.rs` traits + `src/win/`, compiled by a Windows CI job) and
+kept in sync with `main` (full-screen capture, stop-gesture trim, hotplug).
+Before it lands: functional testing on a live Windows desktop.
+- [x] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
+- [x] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
+- [x] Full-screen capture (`BitBlt` of the virtual screen) for panel/popup clicks.
+- [x] Cursor + window geometry (`GetCursorPos`, `GetForegroundWindow`,
+      `GetWindowRect`), popup detection via `WindowFromPoint`.
+- [x] Element names via UI Automation (`ElementFromPoint`).
+- [x] Tray via `Shell_NotifyIcon`.
+- [x] Cross-platform main loop selecting the backend by `cfg`.
+- [ ] Live-desktop testing + polishing (DPI/scale, balloon timing, marker fit).
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see
