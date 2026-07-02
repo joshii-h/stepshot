@@ -97,7 +97,6 @@ fn image_rtf(dir: &Path, name: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Button;
 
     #[test]
     fn escapes_braces_and_unicode() {
@@ -114,17 +113,11 @@ mod tests {
             .unwrap();
         let steps = vec![Step {
             index: 1,
-            button: Button::Left,
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: Some("Café".into()),
-            process: None,
             element: Some("button “Save”".into()),
-            element_box: None,
-            description_override: None,
-            is_screen: false,
-            double: false,
-            drag: false,
+            ..Step::default()
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let rtf = std::fs::read_to_string(dir.join("report.rtf")).unwrap();

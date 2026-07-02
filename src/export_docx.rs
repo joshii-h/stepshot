@@ -75,7 +75,6 @@ fn fit_emu(w_px: u32, h_px: u32) -> (u32, u32) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Button;
 
     #[test]
     fn writes_a_nonempty_docx() {
@@ -86,17 +85,11 @@ mod tests {
             .unwrap();
         let steps = vec![Step {
             index: 1,
-            button: Button::Left,
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: Some("Test Window 😀 — café".into()),
-            process: None,
             element: Some("button “Save”".into()),
-            element_box: None,
-            description_override: None,
-            is_screen: false,
-            double: false,
-            drag: false,
+            ..Step::default()
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let f = dir.join("report.docx");
