@@ -115,7 +115,7 @@ Before it lands: functional testing on a live Windows desktop.
 - [x] Cross-platform main loop selecting the backend by `cfg`.
 - [ ] Live-desktop testing + polishing (DPI/scale, balloon timing, marker fit).
 
-### 0.4 — Step editing & redaction
+### 0.4 — Step editing & redaction (shipped)
 The clearest learning from the wider step-recorder field (BetterStepsRecorder,
 OpenSteps, PSR++ — all of which ship an editor): the most-wanted post-capture
 ability is fixing a recording without re-recording it — especially removing or
@@ -150,7 +150,7 @@ session" opens the report as the native entry point. Each session also gains a
 - [x] Insert manual steps in the editor (**+ Add step**): required text +
       optional image (file → copied in); rendered text-only when imageless.
 
-### 0.5 — Capture polish
+### 0.5 — Capture polish (shipped)
 - [x] Double-click merge: two rapid clicks of the same button within
       `[capture] double_click_ms` (default 400 ms) become one “double click”
       step instead of two near-identical ones.
