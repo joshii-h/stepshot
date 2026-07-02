@@ -7,8 +7,7 @@ use crate::config::Config;
 use crate::cursor::KwinCursor;
 use crate::icon;
 use crate::model::Button;
-use crate::report;
-use crate::session::{capture_step, output_base};
+use crate::session::{Session, capture_step, finalize, output_base};
 use anyhow::Result;
 use chrono::Local;
 use std::time::Duration;
@@ -78,7 +77,14 @@ pub fn run_test_modes(
             &config.marker,
         )?;
         println!("Oneshot → {}", step.describe());
-        report::write_final(&dir, &[step], &started, &config.export)?;
+        // Route through a real Session so this also writes session.json — the
+        // full capture→serialize→report pipeline in one shot.
+        let session = Session {
+            dir: dir.clone(),
+            started,
+            steps: vec![step],
+        };
+        finalize(&session, &config.export);
         if let Some(a) = atspi.as_ref() {
             a.restore();
         }

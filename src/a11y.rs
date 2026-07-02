@@ -26,6 +26,10 @@ const QUERY_DEADLINE: Duration = Duration::from_millis(1500);
 pub struct Element {
     pub name: String,
     pub role: String,
+    /// On-screen bounding box `(x, y, w, h)` in screen coordinates, if the app
+    /// reports it (`Component.GetExtents`). Used to offer one-click redaction of
+    /// the clicked element.
+    pub bounds: Option<(i32, i32, i32, i32)>,
 }
 
 impl Element {
@@ -173,7 +177,8 @@ impl Probe {
                     let name = self.name(&node);
                     let role = self.role_name(&node);
                     if !name.is_empty() || !role.is_empty() {
-                        return Some(Element { name, role });
+                        let bounds = self.extents(&node).filter(|&(_, _, w, h)| w > 0 && h > 0);
+                        return Some(Element { name, role, bounds });
                     }
                 }
             }

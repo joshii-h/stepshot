@@ -253,6 +253,7 @@ mod tests {
             window_title: Some("Test “Window” — café".into()),
             process: None,
             element: Some("button “Save”".into()),
+            element_box: None,
             is_screen: false,
             double: false,
         }];

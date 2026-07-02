@@ -6,6 +6,7 @@ use crate::annotate::{self, MarkerStyle};
 use crate::capture::{KdeCapturer, WindowCapturer};
 use crate::config::{Config, ExportConfig};
 use crate::cursor::KwinCursor;
+use crate::json::Json;
 use crate::model::{Button, Step};
 use crate::report;
 use anyhow::{Context, Result};
@@ -25,12 +26,105 @@ pub fn finalize(s: &Session, export: &ExportConfig) {
     if s.steps.is_empty() {
         return;
     }
+    // The JSON source-of-truth: what `stepshot apply` rebuilds every format from.
+    write_session_json(s);
     // Self-contained HTML (images embedded) — a single file you can send.
     if let Err(e) = report::write_final(&s.dir, &s.steps, &s.started, export) {
         eprintln!("[stepshot] could not write report: {e:#}");
     } else {
         eprintln!("[stepshot] report: {}", s.dir.join("report.html").display());
     }
+}
+
+/// Serialize the session to the `session.json` source-of-truth: everything
+/// `stepshot apply` needs to rebuild every export, and everything the in-report
+/// editor needs (per-step metadata + the clicked element's box in image pixels).
+pub fn session_json(s: &Session) -> String {
+    let steps: Vec<Json> = s.steps.iter().map(step_json).collect();
+    Json::obj(vec![
+        ("schema", 1u32.into()),
+        ("app", "stepshot".into()),
+        ("version", env!("CARGO_PKG_VERSION").into()),
+        ("language", crate::i18n::tr().html_lang.into()),
+        ("started", s.started.as_str().into()),
+        ("steps", Json::Arr(steps)),
+    ])
+    .to_pretty()
+}
+
+fn step_json(step: &Step) -> Json {
+    let button = match step.button {
+        Button::Left => "left",
+        Button::Right => "right",
+        Button::Middle => "middle",
+    };
+    let element_box = match step.element_box {
+        Some([x, y, w, h]) => Json::Arr(vec![x.into(), y.into(), w.into(), h.into()]),
+        None => Json::Null,
+    };
+    Json::obj(vec![
+        ("index", step.index.into()),
+        ("button", button.into()),
+        ("double", step.double.into()),
+        ("time", step.time.as_str().into()),
+        ("image", step.image_file.as_str().into()),
+        ("is_screen", step.is_screen.into()),
+        ("window_title", step.window_title.clone().into()),
+        ("process", step.process.clone().into()),
+        ("element", step.element.clone().into()),
+        ("element_box", element_box),
+        // The auto-generated description. The editor may override the display
+        // text, but this original stays here so an override can be reverted.
+        ("description", step.describe().into()),
+    ])
+}
+
+/// Write `session.json` (no-op for 0 steps). Called incrementally after each
+/// step (crash-safe) and again on finalize.
+pub fn write_session_json(s: &Session) {
+    if s.steps.is_empty() {
+        return;
+    }
+    if let Err(e) = std::fs::write(s.dir.join("session.json"), session_json(s)) {
+        eprintln!("[stepshot] could not write session.json: {e}");
+    }
+}
+
+/// Map an AT-SPI element box (screen coords) into image-pixel coordinates using
+/// the same frame offset + scale as the click marker, clamped to the image.
+/// Returns `None` if the box is empty or maps entirely off the image.
+fn map_element_box(
+    (ex, ey, ew, eh): (i32, i32, i32, i32),
+    (frame_x, frame_y): (i32, i32),
+    scale: f64,
+    (off_x, off_y): (f64, f64),
+    (img_w, img_h): (u32, u32),
+) -> Option<[u32; 4]> {
+    if ew <= 0 || eh <= 0 {
+        return None;
+    }
+    let to_img = |sx: i32, sy: i32| {
+        (
+            (sx - frame_x) as f64 * scale + off_x,
+            (sy - frame_y) as f64 * scale + off_y,
+        )
+    };
+    let (x0, y0) = to_img(ex, ey);
+    let (x1, y1) = to_img(ex + ew, ey + eh);
+    let cx0 = x0.clamp(0.0, img_w as f64);
+    let cy0 = y0.clamp(0.0, img_h as f64);
+    let cx1 = x1.clamp(0.0, img_w as f64);
+    let cy1 = y1.clamp(0.0, img_h as f64);
+    let (w, h) = (cx1 - cx0, cy1 - cy0);
+    if w < 1.0 || h < 1.0 {
+        return None;
+    }
+    Some([
+        cx0.round() as u32,
+        cy0.round() as u32,
+        w.round() as u32,
+        h.round() as u32,
+    ])
 }
 
 /// Captures one step: get cursor → photograph window/screen → resolve element
@@ -72,22 +166,36 @@ pub fn capture_step(
         cap.is_screen = true;
     }
 
-    let element = match (atspi.as_ref(), ci.as_ref()) {
-        (Some(a), Some(c)) => a.element_at(c.x, c.y).map(|e| e.describe()),
+    let el = match (atspi.as_ref(), ci.as_ref()) {
+        (Some(a), Some(c)) => a.element_at(c.x, c.y),
         _ => None,
     };
+    let element = el.as_ref().map(|e| e.describe());
 
     // For a full-screen fallback the window-relative marker math doesn't apply;
     // the baked-in cursor (include-cursor) already marks the spot.
+    let mut element_box = None;
     if let Some(c) = ci.as_ref()
         && !cap.is_screen
     {
         let s = if cap.scale > 0.0 { cap.scale } else { 1.0 };
-        let off_x = (cap.image.width() as f64 - c.frame_w as f64 * s) / 2.0;
-        let off_y = (cap.image.height() as f64 - c.frame_h as f64 * s) / 2.0;
+        let (img_w, img_h) = (cap.image.width(), cap.image.height());
+        let off_x = (img_w as f64 - c.frame_w as f64 * s) / 2.0;
+        let off_y = (img_h as f64 - c.frame_h as f64 * s) / 2.0;
         let mx = ((c.x - c.frame_x) as f64 * s + off_x).round() as i32;
         let my = ((c.y - c.frame_y) as f64 * s + off_y).round() as i32;
         annotate::draw_click_marker(&mut cap.image, mx, my, marker);
+        // Map the AT-SPI element box (screen coords) into image pixels, using
+        // the very same offset/scale, so the editor can redact it precisely.
+        if let Some((ex, ey, ew, eh)) = el.as_ref().and_then(|e| e.bounds) {
+            element_box = map_element_box(
+                (ex, ey, ew, eh),
+                (c.frame_x, c.frame_y),
+                s,
+                (off_x, off_y),
+                (img_w, img_h),
+            );
+        }
     }
 
     let image_file = format!("step-{index:03}.png");
@@ -103,6 +211,7 @@ pub fn capture_step(
         window_title: cap.window_title,
         process: cap.process,
         element,
+        element_box,
         is_screen: cap.is_screen,
         double: false,
     })
@@ -191,6 +300,7 @@ mod tests {
             window_title: window_title.map(String::from),
             process: None,
             element: None,
+            element_box: None,
             is_screen,
             double: false,
         }
@@ -241,5 +351,57 @@ mod tests {
         let mut steps = vec![step(true, Some("Some Window"))];
         trim_stop_gesture(&mut steps, 0);
         assert_eq!(steps.len(), 1);
+    }
+
+    #[test]
+    fn maps_element_box_with_scale_and_clamp() {
+        // scale 2, no centering offset, frame at origin.
+        assert_eq!(
+            map_element_box((10, 20, 5, 6), (0, 0), 2.0, (0.0, 0.0), (1000, 1000)),
+            Some([20, 40, 10, 12])
+        );
+        // Frame offset is subtracted; the centering offset is added back.
+        assert_eq!(
+            map_element_box((100, 100, 4, 4), (100, 100), 1.0, (7.0, 8.0), (1000, 1000)),
+            Some([7, 8, 4, 4])
+        );
+        // Degenerate and off-image boxes yield nothing.
+        assert!(map_element_box((0, 0, 0, 10), (0, 0), 1.0, (0.0, 0.0), (100, 100)).is_none());
+        assert!(map_element_box((-50, -50, 10, 10), (0, 0), 1.0, (0.0, 0.0), (100, 100)).is_none());
+    }
+
+    #[test]
+    fn session_json_captures_key_fields() {
+        let mut s0 = step(false, Some("Editor"));
+        s0.process = Some("kitty".into());
+        s0.element_box = Some([1, 2, 3, 4]);
+        let sess = Session {
+            dir: PathBuf::from("/tmp/x"),
+            started: "2026-07-02 13:00:00".into(),
+            steps: vec![s0],
+        };
+        let j = Json::parse(&session_json(&sess)).unwrap();
+        assert_eq!(j.get("schema").and_then(Json::as_i64), Some(1));
+        let steps = j.get("steps").and_then(Json::as_array).unwrap();
+        assert_eq!(steps.len(), 1);
+        let st = &steps[0];
+        assert_eq!(st.get("button").and_then(Json::as_str), Some("left"));
+        assert_eq!(st.get("process").and_then(Json::as_str), Some("kitty"));
+        assert_eq!(
+            st.get("window_title").and_then(Json::as_str),
+            Some("Editor")
+        );
+        let bx: Vec<i64> = st
+            .get("element_box")
+            .and_then(Json::as_array)
+            .unwrap()
+            .iter()
+            .filter_map(Json::as_i64)
+            .collect();
+        assert_eq!(bx, vec![1, 2, 3, 4]);
+        assert_eq!(
+            st.get("description").and_then(Json::as_str),
+            Some("Left click in window “Editor”")
+        );
     }
 }

@@ -15,6 +15,7 @@ mod export_pdf;
 mod i18n;
 mod icon;
 mod input;
+mod json;
 mod model;
 mod notify;
 mod report;
@@ -31,7 +32,7 @@ use cursor::KwinCursor;
 use input::{ClickSource, EvdevClickSource};
 use ksni::blocking::TrayMethods;
 use selftest::run_test_modes;
-use session::{Session, capture_step, finalize, output_base};
+use session::{Session, capture_step, finalize, output_base, write_session_json};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -251,6 +252,7 @@ fn main() -> Result<()> {
                             step.double = true;
                         }
                         let _ = report::write_reports(&s.dir, &s.steps, &s.started, &config.export);
+                        write_session_json(s);
                         last_click = None; // don't chain a third click into it
                     } else {
                         let index = s.steps.len() + 1;
@@ -272,6 +274,7 @@ fn main() -> Result<()> {
                                     &s.started,
                                     &config.export,
                                 );
+                                write_session_json(s);
                                 last_click = Some((click.button, now));
                             }
                             Err(e) => eprintln!("[stepshot] step {index}: {e:#}"),

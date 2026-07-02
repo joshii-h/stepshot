@@ -60,6 +60,12 @@ pub struct Step {
     pub process: Option<String>,
     /// Description of the clicked UI element (AT-SPI), if available.
     pub element: Option<String>,
+    /// Bounding box `[x, y, w, h]` of the clicked element in **image-pixel**
+    /// coordinates (already mapped from AT-SPI screen coords through the
+    /// capture's frame offset + scale). Enables one-click redaction of the
+    /// clicked element in the editor. `None` for screen captures or when no box
+    /// was resolved.
+    pub element_box: Option<[u32; 4]>,
     /// The screenshot shows the whole screen, not a single window (panel,
     /// desktop or popup-menu click).
     pub is_screen: bool,
@@ -123,6 +129,7 @@ mod tests {
             window_title: window_title.map(String::from),
             process: None,
             element: element.map(String::from),
+            element_box: None,
             is_screen: false,
             double: false,
         }
