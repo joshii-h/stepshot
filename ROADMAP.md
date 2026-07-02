@@ -118,10 +118,24 @@ The clearest learning from the wider step-recorder field (BetterStepsRecorder,
 OpenSteps, PSR++ — all of which ship an editor): the most-wanted post-capture
 ability is fixing a recording without re-recording it — especially removing or
 blurring something sensitive before sharing.
-- [ ] Redaction: blur/pixelate sensitive regions of a screenshot before export.
-- [ ] Edit step descriptions after recording.
-- [ ] Delete individual steps and re-export the reports.
-- [ ] Insert manual steps (custom text, optional screenshot).
+
+**Design (locked via a decision-tree interview):** editing happens in the
+already-generated `report.html`, which gains a client-side JS editor (no GUI
+toolkit, no new deps, reuses the report we already write). "Save" downloads a
+small `edits.json`; `stepshot apply <session-dir> edits.json` then applies the
+edits to disk and regenerates every enabled export. A tray entry "Edit last
+session" opens the report as the native entry point. Each session also gains a
+`session.json` (source of truth) so `apply` can rebuild all formats.
+
+- [ ] `session.json` per session + `stepshot apply` (rebuild all enabled formats).
+- [ ] Redaction: **destructive** pixelation of `step-NNN.png` (original pixels
+      gone). Regions picked by dragging a box in the editor, or one-click on the
+      **clicked element's AT-SPI box** (extents stored at capture time).
+- [ ] Edit step descriptions (override the display text; keep the auto-generated
+      one in `session.json` for revert).
+- [ ] Delete steps (renumber + rename the PNGs; gap-free output).
+- [ ] Insert manual steps (required text + optional image file copied in).
+- [ ] Reorder steps (cheap in the editor; BetterStepsRecorder/OpenSteps ship it).
 
 ### 0.5 — Capture polish
 - [ ] Double-click merge: two rapid clicks at the same spot become one
@@ -131,12 +145,22 @@ blurring something sensitive before sharing.
 - [ ] Drag & drop as a step type (press → release at different points).
 - [ ] Process name (in addition to the window title) in the step metadata.
 
-### 0.6 — Configuration
+### 0.6 — Configuration & export selection
 - [ ] Config file (`~/.config/stepshot/config.toml`) — stepshot currently has
       zero persistent settings.
 - [ ] Marker style: color, opacity, size (defaults = the current translucent
       yellow highlight).
 - [ ] Default output folder and capture preferences.
+- [ ] **Export selection**: `[export] formats = […]` — the user picks which
+      formats get written (default: all available). Honored by both the
+      recording loop and `stepshot apply`.
+
+### 0.7 — More export formats
+Round out "offer every export the user might want, they pick." Each new renderer
+plugs into the 0.6 export selection.
+- [ ] ODT (LibreOffice Writer).
+- [ ] RTF (Word/WordPad).
+- [ ] Plain text (.txt) — numbered steps, images referenced by filename.
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see

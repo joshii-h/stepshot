@@ -177,7 +177,9 @@ export (roadmap milestone 0.2) has already shipped; in short, next up:
   re-recording: blur sensitive regions, edit descriptions, delete steps
 - **Capture polish** (milestone 0.5) — double-click merge, pause/resume,
   click filtering, drag & drop steps
-- **Configuration** (milestone 0.6) — config file with marker style options
+- **Configuration & export selection** (milestone 0.6) — config file with marker
+  style options; the user picks which export formats get written
+- **More export formats** (milestone 0.7) — ODT, RTF, plain text
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)
