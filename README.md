@@ -173,10 +173,14 @@ export (roadmap milestone 0.2) has already shipped; in short, next up:
 - **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3);
   implemented on the `feature/windows-backend` branch, kept in sync with main and
   compiled in CI — what's left is runtime testing on a real Windows machine
+- **Step editing & redaction** (milestone 0.4) — fix a recording without
+  re-recording: blur sensitive regions, edit descriptions, delete steps
+- **Capture polish** (milestone 0.5) — double-click merge, pause/resume,
+  click filtering, drag & drop steps
+- **Configuration** (milestone 0.6) — config file with marker style options
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)
-- Pause/resume, click filtering, redaction
 
 ## License
 
