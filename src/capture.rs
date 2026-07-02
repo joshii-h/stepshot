@@ -4,16 +4,24 @@
 //! KWin writes the raw image into a pipe file descriptor that we pass along
 //! (FD passing) — exactly what `spectacle` does internally, just directly.
 //!
-//! The `WindowCapturer` trait abstracts the platform; a Windows backend
-//! (`PrintWindow`) implements the same trait later.
+//! Implements the [`WindowCapturer`] platform trait; the Windows backend
+//! (`PrintWindow`) implements the same trait in `win::capture`.
 
-use crate::platform::{Capture, WindowCapturer};
+use crate::platform::{Capture, CursorInfo, WindowCapturer};
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::fd::AsFd;
+use std::sync::mpsc;
+use std::time::Duration;
 use zvariant::{Fd, OwnedValue, Value};
+
+/// Maximum time to wait for KWin to stream the image into the pipe. Normally
+/// this is near-instant (local pipe); the deadline only guards against a
+/// compositor that never closes its write end, which would otherwise hang the
+/// main loop forever.
+const READ_DEADLINE: Duration = Duration::from_secs(10);
 
 /// KWin ScreenShot2 backend (KDE Plasma, Wayland & X11).
 pub struct KdeCapturer {
@@ -34,6 +42,25 @@ impl KdeCapturer {
 
 impl WindowCapturer for KdeCapturer {
     fn capture_active_window(&self) -> Result<Capture> {
+        self.capture_via("CaptureActiveWindow", None)
+    }
+
+    /// Captures the output under the cursor by name, or the active screen when
+    /// the output name is unknown. KWin renders the real cursor into the image
+    /// (`include-cursor`), so the click location is visible without a marker.
+    fn capture_screen_under_cursor(&self, ci: Option<&CursorInfo>) -> Result<Capture> {
+        match ci {
+            Some(c) if !c.screen.is_empty() => self.capture_via("CaptureScreen", Some(&c.screen)),
+            _ => self.capture_via("CaptureActiveScreen", None),
+        }
+    }
+}
+
+impl KdeCapturer {
+    /// Runs one ScreenShot2 capture method and decodes the result. `screen` is
+    /// the leading output-name argument for `CaptureScreen`; `None` for the
+    /// `CaptureActiveWindow` / `CaptureActiveScreen` variants.
+    fn capture_via(&self, method: &str, screen: Option<&str>) -> Result<Capture> {
         // Pipe: KWin gets the write end, we read the image from the read end.
         let (mut reader, writer) = os_pipe::pipe().context("could not create pipe")?;
 
@@ -45,16 +72,24 @@ impl WindowCapturer for KdeCapturer {
 
         let fd = Fd::from(writer.as_fd());
 
-        let reply = self
-            .conn
-            .call_method(
+        // CaptureScreen takes a leading output-name argument; the others don't.
+        let path = "/org/kde/KWin/ScreenShot2";
+        let iface = Some("org.kde.KWin.ScreenShot2");
+        let call = match screen {
+            Some(name) => self.conn.call_method(
                 Some("org.kde.KWin"),
-                "/org/kde/KWin/ScreenShot2",
-                Some("org.kde.KWin.ScreenShot2"),
-                "CaptureActiveWindow",
-                &(options, fd),
-            )
-            .context("CaptureActiveWindow failed (KWin may gate this interface)")?;
+                path,
+                iface,
+                method,
+                &(name, options, fd),
+            ),
+            None => {
+                self.conn
+                    .call_method(Some("org.kde.KWin"), path, iface, method, &(options, fd))
+            }
+        };
+        let reply =
+            call.with_context(|| format!("{method} failed (KWin may gate this interface)"))?;
 
         // Close our write end, otherwise the read never reaches EOF.
         drop(writer);
@@ -74,10 +109,20 @@ impl WindowCapturer for KdeCapturer {
         let stride = get_i64(&results, "stride").context("no 'stride' in reply")? as usize;
         let format = get_i64(&results, "format").unwrap_or(6); // 6 = ARGB32_Premultiplied
 
-        // Read the raw bytes from the pipe (height * stride).
-        let mut raw = Vec::with_capacity(stride.saturating_mul(height as usize));
-        reader
-            .read_to_end(&mut raw)
+        // Read the raw bytes from the pipe (height * stride) on a helper thread
+        // with a deadline — like the AT-SPI queries, a stuck read must not hang
+        // the recorder. On timeout the reader thread stays blocked in the
+        // background until KWin eventually closes the fd.
+        let expected = stride.saturating_mul(height as usize);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut raw = Vec::with_capacity(expected);
+            let res = reader.read_to_end(&mut raw).map(|_| raw);
+            let _ = tx.send(res);
+        });
+        let raw = rx
+            .recv_timeout(READ_DEADLINE)
+            .context("timed out waiting for image data from KWin")?
             .context("could not read image data")?;
 
         let image = decode_qimage(&raw, width, height, stride, format)
@@ -92,6 +137,7 @@ impl WindowCapturer for KdeCapturer {
             image,
             window_title,
             scale,
+            is_screen: false,
         })
     }
 }
@@ -196,5 +242,49 @@ fn get_f64(map: &HashMap<String, OwnedValue>, key: &str) -> Option<f64> {
         Value::I32(n) => Some(*n as f64),
         Value::U32(n) => Some(*n as f64),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One BGRA pixel, optionally premultiplied, in a row padded to `stride`.
+    fn buf(pixel: [u8; 4], stride: usize) -> Vec<u8> {
+        let mut raw = vec![0u8; stride];
+        raw[..4].copy_from_slice(&pixel);
+        raw
+    }
+
+    #[test]
+    fn decode_swaps_bgra_to_rgba() {
+        // B=10, G=20, R=30, A=255 (format 5 = ARGB32, not premultiplied)
+        let img = decode_qimage(&buf([10, 20, 30, 255], 4), 1, 1, 4, 5).unwrap();
+        assert_eq!(img.get_pixel(0, 0).0, [30, 20, 10, 255]);
+    }
+
+    #[test]
+    fn decode_unpremultiplies_format_6() {
+        // Premultiplied with a=128: stored channel 64 ≈ original 127.
+        let img = decode_qimage(&buf([64, 64, 64, 128], 4), 1, 1, 4, 6).unwrap();
+        let p = img.get_pixel(0, 0).0;
+        assert_eq!(p[3], 128);
+        for c in &p[..3] {
+            assert!((126..=129).contains(c), "channel {c} should be ≈127");
+        }
+    }
+
+    #[test]
+    fn decode_respects_stride_padding() {
+        // stride 8 for a 1-px row: the pixel must come from the row start.
+        let img = decode_qimage(&buf([0, 0, 200, 255], 8), 1, 1, 8, 5).unwrap();
+        assert_eq!(img.get_pixel(0, 0).0[0], 200);
+    }
+
+    #[test]
+    fn decode_rejects_short_buffers_and_zero_sizes() {
+        assert!(decode_qimage(&[0u8; 4], 2, 2, 8, 5).is_err()); // too little data
+        assert!(decode_qimage(&[], 0, 1, 4, 5).is_err()); // zero width
+        assert!(decode_qimage(&[0u8; 4], 1, 1, 2, 5).is_err()); // stride < row
     }
 }

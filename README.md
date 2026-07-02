@@ -6,30 +6,39 @@
 > KDE Plasma / Wayland only for now.
 
 A lean, open-source **step recorder** — the open-source answer to Windows
-*Steps Recorder* (PSR), but better: on every mouse click it screenshots **exactly
-the clicked window**, **marks the click**, names the **clicked UI element** (via
+*Steps Recorder* (PSR), but better: on every mouse click it screenshots **the
+clicked window** (or the whole screen when the click lands on the panel or in
+a popup menu), **marks the click**, names the **clicked UI element** (via
 accessibility), and writes a **self-contained HTML report** describing each step.
 
 It lives in the system tray; you start and stop recording from there.
 
-## Features (v0.1, alpha)
+## Features (alpha)
 
 - **Tray app**: runs in the system tray (camera icon, red dot while recording),
   start/stop from the tray menu — no terminal, no Ctrl+C needed.
-- **Global click capture** without root — reads evdev directly (`input` group is enough).
+- **Global click capture** without root — reads evdev directly (`input` group is
+  enough); mice plugged in while running are picked up automatically.
 - **Window screenshot** of the active window via `org.kde.KWin.ScreenShot2`
-  (D-Bus, FD passing) — **no runtime dependency** like `spectacle`.
+  (D-Bus, FD passing) — **no runtime dependency** like `spectacle`. Clicks that
+  don't land in the active window (panel, start menu, desktop) or hit a **popup
+  menu** (a separate Wayland surface) get a **full-screen capture** instead, so
+  what you clicked is always in the picture.
 - **Click marker** + the real mouse cursor baked into the image (KWin `include-cursor`).
+- **Own clicks stay out**: the clicks that operate stepshot's tray menu
+  (start/stop/quit) are not recorded as steps.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
   and a **self-contained** `report.html` (images embedded as base64) plus `report.md`.
+- **Exports**: on stop you also get `report.pdf` (paginated, one page per step) and
+  `report.docx` (Word) with the screenshots embedded — pure-Rust, no external tools.
 
 ## Requirements
 
 | Purpose | Requirement |
 |---------|-------------|
 | Screenshot authorization | a `.desktop` file with `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (created by `install.sh`) |
-| Click capture | user in the `input` group |
+| Click capture | user in the `input` group — `sudo usermod -aG input "$USER"`, then **reboot** (see note below) |
 | Element detection (Qt/KDE) | **qtbase built with the `accessibility` USE flag** (Gentoo) / the Qt AT-SPI bridge |
 | Element detection (GTK) | `at-spi2-atk` / `libatk-bridge` (usually present) |
 | Element detection (Firefox) | activates automatically once an AT is detected |
@@ -64,7 +73,11 @@ Sessions are written to `~/Pictures/stepshot/session-<timestamp>/`.
 STEPSHOT_ONESHOT=1 stepshot   # capture a single step (pipeline self-test)
 STEPSHOT_DEBUG=1   stepshot   # extra diagnostics on stderr
 STEPSHOT_ICON=1    stepshot   # render the tray icon to /tmp for inspection
+STEPSHOT_ATTREE=3  stepshot   # dump the AT-SPI tree (to the given depth)
+STEPSHOT_ATDUMP=1  stepshot   # find the first named button and resolve it back
 ```
+
+`stepshot --help` / `--version` work as expected.
 
 ## How authorization works (KDE)
 
@@ -73,6 +86,17 @@ has an associated `.desktop` file declaring
 `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (KWin matches the
 resolved executable path against `Exec=`). `install.sh` sets this up — which is
 why it **copies** the binary instead of symlinking it.
+
+> **Just joined the `input` group? Reboot — don't just re-log in.** On systemd
+> systems a logout/login does *not* restart the per-user `systemd --user` manager,
+> which launches your tray apps and keeps its *old* group set. So menu-launched
+> stepshot still sees no input device (tray shows, but every recording yields 0
+> steps). A full reboot — or `loginctl terminate-user "$USER"` — fixes it.
+>
+> Tempted to shortcut with `newgrp input` / `sg input`? Don't: the gid switch
+> makes the process *non-dumpable* (e.g. Fedora's `suid_dumpable=2`), so KWin
+> can't read its `/proc/<pid>/exe` to find the `.desktop` and refuses the
+> screenshot with `NoAuthorized`. Reboot instead.
 
 ## Permissions & privacy
 
@@ -99,56 +123,58 @@ builds you trust, and remove the `.desktop` file to revoke screenshot access.
 
 ```
 src/
-  main.rs        session loop + capture_step + per-OS entry points (cfg-selected)
-  platform.rs    traits (ClickSource, WindowCapturer, CursorTracker,
-                 ElementResolver) + shared types (Capture, CursorInfo, Element)
-  annotate.rs    draws the click marker into the image
-  icon.rs        camera icon drawn programmatically (red dot when active)
-  i18n.rs        minimal, dependency-free translations (English, German)
-  model.rs       Step/Button + description logic
-  report.rs      HTML + Markdown   (+ export_pdf.rs / export_docx.rs)
-
-  Linux / KDE backend (cfg target_os = linux):
-    input.rs     EvdevClickSource — /dev/input
-    capture.rs   KdeCapturer      — KWin ScreenShot2 (D-Bus, FD passing)
-    cursor.rs    KwinCursor       — global cursor via a KWin script → zbus sink
-    a11y.rs      Atspi            — GetAccessibleAtPoint (with a deadline)
-    tray.rs      ksni StatusNotifierItem ; notify.rs desktop notifications
-
-  Windows backend (cfg windows) — src/win/:
-    input.rs     WindowsClickSource — WH_MOUSE_LL low-level hook
-    capture.rs   GdiCapturer        — PrintWindow + GetDIBits
-    cursor.rs    WinCursor          — GetCursorPos + GetWindowRect
-    a11y.rs      UiaResolver        — UI Automation ElementFromPoint
-    tray.rs      Shell_NotifyIcon + popup menu + balloon notifications
+  main.rs     startup + tray event loop (start/stop/quit), wiring
+  session.rs  recording session: per-click capture step + final report
+  selftest.rs env-driven debug/self-test modes (ONESHOT, ICON, ATTREE, ATDUMP)
+  tray.rs     tray icon/menu (ksni, StatusNotifierItem)
+  icon.rs     camera icon drawn programmatically (red dot when active)
+  notify.rs   desktop notifications (start/stop)
+  input.rs    ClickSource trait    → EvdevClickSource (Linux)        [Win: LL mouse hook]
+  capture.rs  WindowCapturer trait → KdeCapturer (KWin ScreenShot2)  [Win: PrintWindow]
+  cursor.rs   KwinCursor: global cursor pos via a KWin script → zbus sink
+  a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
+  annotate.rs draws the click marker into the image
+  i18n.rs     minimal, dependency-free translations (one file per language)
+  i18n/       en.rs, de.rs — string tables (add a language by adding a file)
+  model.rs    Step/Button + description logic
+  report.rs   HTML + Markdown
+  export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
 ```
 
-The platform-specific parts sit behind the traits in `platform.rs` — one
-backend per OS, while the rest (`model`, `report`, `annotate`, `i18n`) stays
-shared. The Windows backend compiles in CI but is **not yet runtime-tested**.
+The platform-specific parts sit behind traits — one backend per OS, while the
+rest (`model`, `report`, `annotate`) stays shared. A Windows backend
+(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is the planned next step.
 
 ## Languages
 
 UI, notifications and the report are localized. The language is auto-detected
 from `LANGUAGE`/`LC_ALL`/`LC_MESSAGES`/`LANG` (defaults to English). Currently
-**English** and **German** ship in `src/i18n.rs`.
+**English**, **German**, **French**, **Spanish** and **Italian** ship (one file
+each under `src/i18n/`), so adding a language is a self-contained PR. French,
+Spanish and Italian are machine-assisted translations — native-speaker review
+is welcome.
 
 Adding a language is deliberately simple and compiler-checked:
 
-- **a new string**: add a field to `Strings` — every language `static` is a
-  struct literal, so the compiler forces each language to provide it;
-- **a new language**: add one `static XX: Strings = …` and one match arm in
-  `strings_for`. Placeholders (`{n}`, `{title}`, …) are identical across
-  languages.
+- **a new string**: add a field to `Strings` (in `src/i18n.rs`) — every language
+  file is a struct literal, so the compiler forces each language to provide it;
+- **a new language**: add `src/i18n/xx.rs` with `pub static STRINGS: Strings =
+  …`, then register it in `src/i18n.rs` (`mod xx;`, a `Lang` variant, a
+  `strings_for` arm, and its locale prefix in `Lang::detect`). Placeholders
+  (`{n}`, `{title}`, …) are identical across languages.
 
 ## Roadmap
 
-See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones.
-In short, next up:
+See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones,
+or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOCX
+export (roadmap milestone 0.2) has already shipped; in short, next up:
 
-- **PDF + DOCX export** (milestone 0.2)
-- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
-- More languages (PRs welcome — see `src/i18n.rs`)
+- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3);
+  implemented on the `feature/windows-backend` branch, kept in sync with main and
+  compiled in CI — what's left is runtime testing on a real Windows machine
+- **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
+  I don't have a Mac running a current macOS, so this needs an external contributor
+- More languages (PRs welcome — add a file under `src/i18n/`)
 - Pause/resume, click filtering, redaction
 
 ## License

@@ -1,15 +1,25 @@
 //! Minimal, dependency-free internationalization.
 //!
 //! Design goals: trivially extensible, no runtime deps, compile-time complete.
+//! Each language lives in its own file (`i18n/<code>.rs`) so adding one is a
+//! self-contained PR that touches no other language.
 //!
-//! - **Add a string:** add a field to [`Strings`]. Every language `static` is a
+//! - **Add a string:** add a field to [`Strings`]. Every language file is a
 //!   struct literal, so the compiler then forces *every* language to provide it.
-//! - **Add a language:** add a `static XX: Strings = Strings { … }` and one arm
-//!   in [`strings_for`]. Placeholders (`{n}`, `{title}`, `{action}`, `{element}`,
+//! - **Add a language:** create `i18n/xx.rs` with `pub static STRINGS: Strings
+//!   = Strings { … };`, then register it here — declare `mod xx;`, add an `Xx`
+//!   variant to [`Lang`], map it in [`strings_for`], and add its locale prefix to
+//!   [`Lang::detect`]. Placeholders (`{n}`, `{title}`, `{action}`, `{element}`,
 //!   `{x}`) are identical across languages and filled at the call site via
 //!   `str::replace`.
 //!
 //! The active language is detected once via [`init`] and read with [`tr`].
+
+mod de;
+mod en;
+mod es;
+mod fr;
+mod it;
 
 use std::sync::OnceLock;
 
@@ -18,6 +28,9 @@ use std::sync::OnceLock;
 pub enum Lang {
     En,
     De,
+    Fr,
+    Es,
+    It,
 }
 
 impl Lang {
@@ -28,20 +41,27 @@ impl Lang {
             .iter()
             .find_map(|k| std::env::var(k).ok())
             .filter(|s| !s.is_empty())
-            .unwrap_or_default()
-            .to_lowercase();
-        if v.starts_with("de") {
-            Lang::De
-        } else {
-            Lang::En
+            .unwrap_or_default();
+        Self::from_locale(&v)
+    }
+
+    /// Map a locale value (e.g. `de_CH.UTF-8`, `de:en_US`) to a language.
+    fn from_locale(v: &str) -> Self {
+        let v = v.to_lowercase();
+        match v.get(..2) {
+            Some("de") => Lang::De,
+            Some("fr") => Lang::Fr,
+            Some("es") => Lang::Es,
+            Some("it") => Lang::It,
+            _ => Lang::En,
         }
     }
 }
 
 /// All user-facing strings. Templates use `{placeholders}` filled at call sites.
 ///
-/// Each platform's frontend uses a different subset (e.g. the ksni tray header
-/// vs. the Windows tooltip), so not every field is read on every target.
+/// Each platform's frontend uses a different subset (e.g. `notify_no_input`
+/// only exists on Linux), so not every field is read on every target.
 #[allow(dead_code)]
 pub struct Strings {
     /// BCP-47 code for the HTML `lang` attribute.
@@ -56,6 +76,7 @@ pub struct Strings {
     pub action_on: &'static str,        // "{action} on {element}"
     pub in_window: &'static str,        // "{action} in window “{title}”"
     pub in_active_window: &'static str, // "{action} in the active window"
+    pub in_screen: &'static str,        // "{action} (full-screen view)" — panel/menu/desktop clicks
     pub element_generic: &'static str,  // fallback element word
 
     // Tray.
@@ -71,6 +92,7 @@ pub struct Strings {
     // Notifications.
     pub notify_started: &'static str,
     pub notify_stopped: &'static str, // "Recording stopped — {n} step(s). Report saved."
+    pub notify_no_input: &'static str, // click capture unavailable (input group?)
 
     // Report.
     pub report_heading: &'static str,
@@ -81,64 +103,14 @@ pub struct Strings {
     pub report_self_contained: &'static str, // "self-contained"
 }
 
-static EN: Strings = Strings {
-    html_lang: "en",
-    click_left: "Left click",
-    click_right: "Right click",
-    click_middle: "Middle click",
-    action_on: "{action} on {element}",
-    in_window: "{action} in window “{title}”",
-    in_active_window: "{action} in the active window",
-    element_generic: "element",
-    tray_ready: "stepshot — ready",
-    tray_recording: "● Recording — {n} step(s)",
-    tt_ready: "Ready",
-    tt_recording: "Recording — {n} step(s)",
-    menu_start: "Start recording",
-    menu_stop: "Stop recording & write report",
-    menu_open_folder: "Open last report folder",
-    menu_quit: "Quit stepshot",
-    notify_started: "Recording started",
-    notify_stopped: "Recording stopped — {n} step(s). Report saved.",
-    report_heading: "Recording",
-    report_started: "Started: {x}",
-    report_total: "Total steps: {n}",
-    report_step: "Step {n}",
-    report_steps_word: "step(s)",
-    report_self_contained: "self-contained",
-};
-
-static DE: Strings = Strings {
-    html_lang: "de",
-    click_left: "Linksklick",
-    click_right: "Rechtsklick",
-    click_middle: "Mittelklick",
-    action_on: "{action} auf {element}",
-    in_window: "{action} im Fenster „{title}“",
-    in_active_window: "{action} im aktiven Fenster",
-    element_generic: "Element",
-    tray_ready: "stepshot — bereit",
-    tray_recording: "● Aufnahme — {n} Schritt(e)",
-    tt_ready: "Bereit",
-    tt_recording: "Aufnahme — {n} Schritt(e)",
-    menu_start: "Aufnahme starten",
-    menu_stop: "Aufnahme beenden & Bericht schreiben",
-    menu_open_folder: "Letzten Bericht-Ordner öffnen",
-    menu_quit: "stepshot beenden",
-    notify_started: "Aufnahme gestartet",
-    notify_stopped: "Aufnahme beendet — {n} Schritt(e). Bericht gespeichert.",
-    report_heading: "Aufzeichnung",
-    report_started: "Gestartet: {x}",
-    report_total: "Schritte gesamt: {n}",
-    report_step: "Schritt {n}",
-    report_steps_word: "Schritt(e)",
-    report_self_contained: "eigenständig",
-};
-
+/// Maps a language to its string table (each defined in its own `i18n/*.rs`).
 fn strings_for(lang: Lang) -> &'static Strings {
     match lang {
-        Lang::En => &EN,
-        Lang::De => &DE,
+        Lang::En => &en::STRINGS,
+        Lang::De => &de::STRINGS,
+        Lang::Fr => &fr::STRINGS,
+        Lang::Es => &es::STRINGS,
+        Lang::It => &it::STRINGS,
     }
 }
 
@@ -151,5 +123,24 @@ pub fn init() {
 
 /// The active string table (English until [`init`] runs).
 pub fn tr() -> &'static Strings {
-    CURRENT.get().copied().unwrap_or(&EN)
+    CURRENT.get().copied().unwrap_or(&en::STRINGS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn locale_mapping() {
+        assert!(Lang::from_locale("de_CH.UTF-8") == Lang::De);
+        assert!(Lang::from_locale("DE") == Lang::De);
+        assert!(Lang::from_locale("de:en_US") == Lang::De);
+        assert!(Lang::from_locale("fr_FR.UTF-8") == Lang::Fr);
+        assert!(Lang::from_locale("es_MX") == Lang::Es);
+        assert!(Lang::from_locale("it_IT@euro") == Lang::It);
+        assert!(Lang::from_locale("en_US.UTF-8") == Lang::En);
+        assert!(Lang::from_locale("pt_BR") == Lang::En); // unsupported → fallback
+        assert!(Lang::from_locale("") == Lang::En);
+        assert!(Lang::from_locale("C") == Lang::En);
+    }
 }

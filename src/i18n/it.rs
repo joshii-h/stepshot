@@ -1,0 +1,32 @@
+//! Italian strings — machine-assisted translation; native review welcome.
+
+use super::Strings;
+
+pub static STRINGS: Strings = Strings {
+    html_lang: "it",
+    click_left: "Clic sinistro",
+    click_right: "Clic destro",
+    click_middle: "Clic centrale",
+    action_on: "{action} su {element}",
+    in_window: "{action} nella finestra “{title}”",
+    in_active_window: "{action} nella finestra attiva",
+    in_screen: "{action} (vista a schermo intero)",
+    element_generic: "elemento",
+    tray_ready: "stepshot — pronto",
+    tray_recording: "● Registrazione — {n} passaggio/i",
+    tt_ready: "Pronto",
+    tt_recording: "Registrazione — {n} passaggio/i",
+    menu_start: "Avvia registrazione",
+    menu_stop: "Ferma la registrazione e scrivi il rapporto",
+    menu_open_folder: "Apri l’ultima cartella dei rapporti",
+    menu_quit: "Esci da stepshot",
+    notify_started: "Registrazione avviata",
+    notify_stopped: "Registrazione terminata — {n} passaggio/i. Rapporto salvato.",
+    notify_no_input: "Nessun dispositivo di input: la cattura dei clic è disattivata. Aggiungiti al gruppo «input» e riavvia il sistema (un nuovo accesso non basta).",
+    report_heading: "Registrazione",
+    report_started: "Avviata: {x}",
+    report_total: "Passaggi totali: {n}",
+    report_step: "Passaggio {n}",
+    report_steps_word: "passaggio/i",
+    report_self_contained: "autonomo",
+};

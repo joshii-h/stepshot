@@ -1,11 +1,12 @@
 //! Tray icon: a camera with a record dot (red when active, grey when idle).
 //!
 //! Drawn programmatically and smoothed via supersampling — mirrors
-//! `assets/stepshot.svg`. Returns a `ksni::Icon` in ARGB32 format.
+//! `assets/stepshot.svg`. Platform frontends convert the RGBA image into
+//! their native format (ksni ARGB32 on Linux, `HICON` on Windows).
 
 use image::{Rgba, RgbaImage};
 
-/// Builds the tray icon in the required ARGB32 format (ksni / StatusNotifierItem).
+/// Builds the tray icon in the ARGB32 format ksni / StatusNotifierItem wants.
 #[cfg(target_os = "linux")]
 pub fn tray_icon(recording: bool) -> ksni::Icon {
     let size = 48u32;
@@ -111,11 +112,40 @@ fn put(img: &mut RgbaImage, x: i32, y: i32, color: [u8; 3], alpha: f32) {
     let dst = img.get_pixel_mut(x as u32, y as u32);
     let a = alpha.clamp(0.0, 1.0);
     let blend = |s: u8, d: u8| ((s as f32 * a) + (d as f32 * (1.0 - a))) as u8;
-    let na = (a * 255.0) as u16 + (dst[3] as u16 * (1.0 - a) as u16);
+    let na = (a * 255.0 + dst[3] as f32 * (1.0 - a)) as u8;
     *dst = Rgba([
         blend(color[0], dst[0]),
         blend(color[1], dst[1]),
         blend(color[2], dst[2]),
-        na.min(255) as u8,
+        na,
     ]);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A semi-transparent overlay on an opaque pixel must keep it opaque
+    /// (src-over: a·255 + dst_a·(1−a) = 255 when dst_a = 255).
+    #[test]
+    fn put_keeps_opaque_pixels_opaque() {
+        let mut img = RgbaImage::from_pixel(1, 1, Rgba([10, 20, 30, 255]));
+        put(&mut img, 0, 0, [200, 200, 200], 0.75);
+        assert_eq!(img.get_pixel(0, 0)[3], 255);
+    }
+
+    #[test]
+    fn put_blends_alpha_over_transparent() {
+        let mut img = RgbaImage::new(1, 1);
+        put(&mut img, 0, 0, [200, 200, 200], 0.5);
+        let a = img.get_pixel(0, 0)[3];
+        assert!((126..=128).contains(&a), "alpha {a} should be ≈127");
+    }
+
+    #[test]
+    fn put_ignores_out_of_bounds() {
+        let mut img = RgbaImage::new(2, 2);
+        put(&mut img, -1, 0, [255, 0, 0], 1.0);
+        put(&mut img, 0, 2, [255, 0, 0], 1.0);
+    }
 }

@@ -18,7 +18,9 @@ mod input;
 mod tray;
 
 use crate::platform::{ClickSource, CursorTracker, ElementResolver};
-use crate::{Session, capture_step, finalize, output_base};
+use crate::session::{
+    Session, capture_step, drain_clicks, finalize, output_base, trim_stop_gesture,
+};
 use anyhow::{Context, Result};
 use chrono::Local;
 use std::sync::mpsc;
@@ -76,11 +78,18 @@ pub fn run() -> Result<()> {
                     });
                     last_dir = Some(dir);
                     tray.set_recording(true, 0);
-                    while click_rx.try_recv().is_ok() {}
+                    // Don't record the clicks on the tray menu itself.
+                    drain_clicks(&click_rx);
                     tray.notify(crate::i18n::tr().notify_started);
                 }
                 Cmd::Stop => {
-                    if let Some(s) = session.take() {
+                    if let Some(mut s) = session.take() {
+                        // Discard the gesture clicks that were still queued and
+                        // trim the ones already captured as steps.
+                        let pending = drain_clicks(&click_rx);
+                        for dropped in trim_stop_gesture(&mut s.steps, pending) {
+                            let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
+                        }
                         finalize(&s);
                         if let Some(u) = uia.as_ref() {
                             u.restore();
@@ -98,7 +107,11 @@ pub fn run() -> Result<()> {
                     }
                 }
                 Cmd::Quit => {
-                    if let Some(s) = session.take() {
+                    if let Some(mut s) = session.take() {
+                        let pending = drain_clicks(&click_rx);
+                        for dropped in trim_stop_gesture(&mut s.steps, pending) {
+                            let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
+                        }
                         finalize(&s);
                         if let Some(u) = uia.as_ref() {
                             u.restore();

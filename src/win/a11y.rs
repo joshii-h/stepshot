@@ -33,10 +33,14 @@ impl UiaResolver {
     }
 }
 
-impl ElementResolver for UiaResolver {
-    fn enable(&mut self) {}
-    fn restore(&self) {}
+impl UiaResolver {
+    /// UI Automation is always available — nothing to switch on.
+    pub fn enable(&mut self) {}
+    /// Counterpart to [`UiaResolver::enable`]; also a no-op.
+    pub fn restore(&self) {}
+}
 
+impl ElementResolver for UiaResolver {
     fn element_at(&self, x: i32, y: i32) -> Option<Element> {
         unsafe {
             let el = self.automation.ElementFromPoint(POINT { x, y }).ok()?;

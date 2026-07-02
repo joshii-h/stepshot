@@ -1,11 +1,15 @@
 //! Global cursor position and active-window geometry.
 //!
 //! Unlike Wayland, Windows hands these out directly: `GetCursorPos` plus the
-//! foreground window's `GetWindowRect`.
+//! foreground window's `GetWindowRect`. As a popup hint we check whether the
+//! top-level window under the cursor is the foreground window at all — context
+//! menus, dropdowns and the taskbar are separate top-level windows.
 
 use crate::platform::{CursorInfo, CursorTracker};
 use windows::Win32::Foundation::{POINT, RECT};
-use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, GetForegroundWindow, GetWindowRect};
+use windows::Win32::UI::WindowsAndMessaging::{
+    GA_ROOT, GetAncestor, GetCursorPos, GetForegroundWindow, GetWindowRect, WindowFromPoint,
+};
 
 #[derive(Default)]
 pub struct WinCursor;
@@ -34,6 +38,19 @@ impl CursorTracker for WinCursor {
                 (0, 0, 0, 0)
             };
 
+            // The cursor sits over some other top-level window than the
+            // foreground one (context menu, dropdown, taskbar) — a window
+            // capture of the foreground window would not show it.
+            let in_popup = {
+                let under = WindowFromPoint(p);
+                if under.is_invalid() || hwnd.is_invalid() {
+                    false
+                } else {
+                    let root = GetAncestor(under, GA_ROOT);
+                    !root.is_invalid() && root != hwnd
+                }
+            };
+
             Some(CursorInfo {
                 x: p.x,
                 y: p.y,
@@ -41,6 +58,8 @@ impl CursorTracker for WinCursor {
                 frame_y: fy,
                 frame_w: fw,
                 frame_h: fh,
+                in_popup,
+                screen: String::new(),
             })
         }
     }

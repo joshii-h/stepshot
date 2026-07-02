@@ -31,6 +31,10 @@ pub struct Atspi {
     session: zbus::blocking::Connection,
     /// Previous IsEnabled state, to restore it.
     prev_enabled: Option<bool>,
+    /// Previous ScreenReaderEnabled state, tracked separately: IsEnabled may
+    /// already be on while the screen-reader flag is off, and leaving the
+    /// latter set makes apps behave as if a screen reader were running.
+    prev_screen_reader: Option<bool>,
 }
 
 impl Atspi {
@@ -59,7 +63,39 @@ impl Atspi {
             probe: Probe { bus },
             session,
             prev_enabled: None,
+            prev_screen_reader: None,
         })
+    }
+
+    /// Enables AT-SPI system-wide (remembering the previous state of both flags).
+    pub fn enable(&mut self) {
+        self.prev_enabled = self.get_status_bool("IsEnabled");
+        self.prev_screen_reader = self.get_status_bool("ScreenReaderEnabled");
+        self.set_status_bool("IsEnabled", true);
+        self.set_status_bool("ScreenReaderEnabled", true);
+    }
+
+    /// Restores the previous a11y state (each flag independently).
+    pub fn restore(&self) {
+        if let Some(false) = self.prev_enabled {
+            self.set_status_bool("IsEnabled", false);
+        }
+        if let Some(false) = self.prev_screen_reader {
+            self.set_status_bool("ScreenReaderEnabled", false);
+        }
+    }
+
+    /// Element at screen coordinate (x, y) — with a hard deadline.
+    pub fn element_at(&self, x: i32, y: i32) -> Option<Element> {
+        let bus = self.probe.bus.clone();
+        let (tx, rx) = mpsc::channel();
+        // Worker thread: if it blocks on a hung app, we still give up after the
+        // deadline (the thread keeps running in the background).
+        std::thread::spawn(move || {
+            let probe = Probe { bus };
+            let _ = tx.send(probe.element_at_inner(x, y));
+        });
+        rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
     }
 
     /// Debug: print the tree (name + role) up to `max_depth`.
@@ -104,33 +140,10 @@ impl Atspi {
     }
 }
 
+/// Thin delegation to the inherent method (which `selftest` also uses directly).
 impl ElementResolver for Atspi {
-    /// Enables AT-SPI system-wide (remembering the previous state).
-    fn enable(&mut self) {
-        self.prev_enabled = self.get_status_bool("IsEnabled");
-        self.set_status_bool("IsEnabled", true);
-        self.set_status_bool("ScreenReaderEnabled", true);
-    }
-
-    /// Restores the previous a11y state.
-    fn restore(&self) {
-        if let Some(false) = self.prev_enabled {
-            self.set_status_bool("IsEnabled", false);
-            self.set_status_bool("ScreenReaderEnabled", false);
-        }
-    }
-
-    /// Element at screen coordinate (x, y) — with a hard deadline.
     fn element_at(&self, x: i32, y: i32) -> Option<Element> {
-        let bus = self.probe.bus.clone();
-        let (tx, rx) = mpsc::channel();
-        // Worker thread: if it blocks on a hung app, we still give up after the
-        // deadline (the thread keeps running in the background).
-        std::thread::spawn(move || {
-            let probe = Probe { bus };
-            let _ = tx.send(probe.element_at_inner(x, y));
-        });
-        rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
+        Atspi::element_at(self, x, y)
     }
 }
 
