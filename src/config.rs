@@ -54,6 +54,36 @@ impl CaptureConfig {
     pub fn records(&self, button: Button) -> bool {
         self.buttons.contains(&button)
     }
+
+    /// If the click's pointer movement crosses the drag threshold, return that
+    /// delta (marking it a drag); otherwise `None` (a plain click).
+    pub fn drag_delta(&self, click: &crate::model::Click) -> Option<(i32, i32)> {
+        let min = self.drag_min_px as i32;
+        if min == 0 {
+            return None;
+        }
+        let (dx, dy) = click.drag;
+        (dx.abs() >= min || dy.abs() >= min).then_some((dx, dy))
+    }
+
+    /// Whether `button` clicked at `now` completes a double-click with the last
+    /// recorded click — same button, within the window (0 disables merging).
+    pub fn is_double_click(
+        &self,
+        last: Option<(Button, std::time::Instant)>,
+        button: Button,
+        now: std::time::Instant,
+    ) -> bool {
+        if self.double_click_ms == 0 {
+            return false;
+        }
+        match last {
+            Some((b, t)) => {
+                b == button && now.duration_since(t).as_millis() as u64 <= self.double_click_ms
+            }
+            None => false,
+        }
+    }
 }
 
 /// Which report formats get written.
@@ -181,6 +211,23 @@ impl Config {
     pub fn example_toml() -> &'static str {
         EXAMPLE_TOML
     }
+}
+
+/// `--write-config`: write the commented example config to the standard path
+/// (never overwriting an existing one) and print where it went.
+pub fn write_example() -> anyhow::Result<()> {
+    use anyhow::Context;
+    let path = config_path().context("could not determine the config path")?;
+    if path.exists() {
+        eprintln!("config already exists: {}", path.display());
+        return Ok(());
+    }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).context("could not create the config folder")?;
+    }
+    std::fs::write(&path, Config::example_toml()).context("could not write the config file")?;
+    println!("wrote example config: {}", path.display());
+    Ok(())
 }
 
 /// `$XDG_CONFIG_HOME/stepshot/config.toml`, else `~/.config/…`, else (Windows)

@@ -6,12 +6,6 @@
 //! exactly that — objects, arrays, strings (with the standard escapes including
 //! `\uXXXX` surrogate pairs), numbers, booleans and null. Same spirit as the
 //! hand-rolled base64 / TOML-subset code elsewhere: no runtime dependency.
-//!
-//! The reader (`Json::parse` + the accessors) is exercised by the unit tests
-//! here and gets its first non-test caller in `stepshot apply` (the editing
-//! milestone); it deliberately lands together with the writer, so allow it to
-//! sit ahead of that caller.
-#![allow(dead_code)]
 
 use std::fmt::Write as _;
 
@@ -74,10 +68,17 @@ impl Json {
             None
         }
     }
-    pub fn is_null(&self) -> bool {
-        matches!(self, Json::Null)
+    /// A 4-number array (negative values clamped to 0) → `[u32; 4]` — the shape
+    /// of every pixel box in `session.json`/`edits.json` (`[x, y, w, h]`).
+    pub fn as_u32x4(&self) -> Option<[u32; 4]> {
+        let v: Vec<u32> = self
+            .as_array()?
+            .iter()
+            .filter_map(Json::as_i64)
+            .map(|n| n.max(0) as u32)
+            .collect();
+        (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
     }
-
     // ── writer ──────────────────────────────────────────────────────────
 
     /// Compact serialization (no whitespace).

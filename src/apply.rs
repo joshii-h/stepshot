@@ -27,9 +27,10 @@
 
 use crate::config::Config;
 use crate::json::Json;
-use crate::model::{Button, Step};
+use crate::model::Step;
 use crate::report;
-use crate::session::{self, Session};
+use crate::session::Session;
+use crate::store;
 use anyhow::{Context, Result};
 use image::RgbaImage;
 use std::collections::HashMap;
@@ -147,7 +148,7 @@ impl Edits {
                 let redactions = e
                     .get("redact")
                     .and_then(Json::as_array)
-                    .map(|a| a.iter().filter_map(box_from_json).collect())
+                    .map(|a| a.iter().filter_map(Json::as_u32x4).collect())
                     .unwrap_or_default();
                 steps.push(EditEntry::Keep {
                     ref_index: r as usize,
@@ -173,7 +174,7 @@ impl Edits {
 fn load_manual_image(spec: &str) -> Result<RgbaImage> {
     if let Some(rest) = spec.strip_prefix("data:") {
         let payload = rest.split_once(',').map(|(_, p)| p).unwrap_or(rest);
-        let bytes = report::base64_decode(payload).context("invalid base64 image data")?;
+        let bytes = crate::b64::base64_decode(payload).context("invalid base64 image data")?;
         Ok(image::load_from_memory(&bytes)
             .context("could not decode image data")?
             .to_rgba8())
@@ -182,16 +183,6 @@ fn load_manual_image(spec: &str) -> Result<RgbaImage> {
             .with_context(|| format!("could not open image {spec}"))?
             .to_rgba8())
     }
-}
-
-fn box_from_json(j: &Json) -> Option<[u32; 4]> {
-    let v: Vec<u32> = j
-        .as_array()?
-        .iter()
-        .filter_map(Json::as_i64)
-        .map(|n| n.max(0) as u32)
-        .collect();
-    (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
 }
 
 /// CLI entry: apply `edits_path` (or, with `None`, just regenerate) and print
@@ -212,7 +203,7 @@ pub fn run(session_dir: &Path, edits_path: Option<&Path>) -> Result<()> {
 /// Apply an in-memory `edits.json` (as produced by the editor's POST) to the
 /// session, returning the resulting step count. Used by `stepshot edit`.
 pub fn apply_text(session_dir: &Path, edits_text: &str) -> Result<usize> {
-    let loaded = session::load_session(session_dir)?;
+    let loaded = store::load_session(session_dir)?;
     crate::i18n::init_lang(&loaded.language);
     let edits = Edits::parse(edits_text)?;
     apply_plan(session_dir, &loaded.session, &edits)
@@ -220,7 +211,7 @@ pub fn apply_text(session_dir: &Path, edits_text: &str) -> Result<usize> {
 
 /// Regenerate the session's exports from `session.json` unchanged.
 fn apply_identity(session_dir: &Path) -> Result<usize> {
-    let loaded = session::load_session(session_dir)?;
+    let loaded = store::load_session(session_dir)?;
     crate::i18n::init_lang(&loaded.language);
     let edits = Edits::identity(&loaded.session);
     apply_plan(session_dir, &loaded.session, &edits)
@@ -279,17 +270,9 @@ fn apply_plan(session_dir: &Path, sess: &Session, edits: &Edits) -> Result<usize
                 };
                 Step {
                     index: new_index,
-                    button: Button::Left,
-                    time: String::new(),
                     image_file,
-                    window_title: None,
-                    process: None,
-                    element: None,
-                    element_box: None,
                     description_override: Some(text.clone()),
-                    is_screen: false,
-                    double: false,
-                    drag: false,
+                    ..Step::default()
                 }
             }
         };
@@ -308,7 +291,7 @@ fn apply_plan(session_dir: &Path, sess: &Session, edits: &Edits) -> Result<usize
         started: sess.started.clone(),
         steps: final_steps,
     };
-    session::write_session_json(&rebuilt);
+    store::write_session_json(&rebuilt);
     report::write_final(
         session_dir,
         &rebuilt.steps,
