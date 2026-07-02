@@ -6,8 +6,9 @@
 > KDE Plasma / Wayland only for now.
 
 A lean, open-source **step recorder** — the open-source answer to Windows
-*Steps Recorder* (PSR), but better: on every mouse click it screenshots **exactly
-the clicked window**, **marks the click**, names the **clicked UI element** (via
+*Steps Recorder* (PSR), but better: on every mouse click it screenshots **the
+clicked window** (or the whole screen when the click lands on the panel or in
+a popup menu), **marks the click**, names the **clicked UI element** (via
 accessibility), and writes a **self-contained HTML report** describing each step.
 
 It lives in the system tray; you start and stop recording from there.
@@ -19,8 +20,13 @@ It lives in the system tray; you start and stop recording from there.
 - **Global click capture** without root — reads evdev directly (`input` group is
   enough); mice plugged in while running are picked up automatically.
 - **Window screenshot** of the active window via `org.kde.KWin.ScreenShot2`
-  (D-Bus, FD passing) — **no runtime dependency** like `spectacle`.
+  (D-Bus, FD passing) — **no runtime dependency** like `spectacle`. Clicks that
+  don't land in the active window (panel, start menu, desktop) or hit a **popup
+  menu** (a separate Wayland surface) get a **full-screen capture** instead, so
+  what you clicked is always in the picture.
 - **Click marker** + the real mouse cursor baked into the image (KWin `include-cursor`).
+- **Own clicks stay out**: the clicks that operate stepshot's tray menu
+  (start/stop/quit) are not recorded as steps.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
   and a **self-contained** `report.html` (images embedded as base64) plus `report.md`.
@@ -67,7 +73,11 @@ Sessions are written to `~/Pictures/stepshot/session-<timestamp>/`.
 STEPSHOT_ONESHOT=1 stepshot   # capture a single step (pipeline self-test)
 STEPSHOT_DEBUG=1   stepshot   # extra diagnostics on stderr
 STEPSHOT_ICON=1    stepshot   # render the tray icon to /tmp for inspection
+STEPSHOT_ATTREE=3  stepshot   # dump the AT-SPI tree (to the given depth)
+STEPSHOT_ATDUMP=1  stepshot   # find the first named button and resolve it back
 ```
+
+`stepshot --help` / `--version` work as expected.
 
 ## How authorization works (KDE)
 
@@ -157,7 +167,9 @@ See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones,
 or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOCX
 export (roadmap milestone 0.2) has already shipped; in short, next up:
 
-- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
+- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3);
+  an implementation exists on the `feature/windows-backend` branch (compiles in CI,
+  needs a rebase onto current main and runtime testing on Windows)
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)

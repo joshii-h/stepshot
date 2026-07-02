@@ -17,7 +17,9 @@ lives in the system tray so a single binary does the whole job.
 
 ## Core principles
 
-- **Per-window capture** — never the whole desktop; only the active window.
+- **Per-window capture** — the active window by default; the whole screen only
+  when the click doesn't land in it (panel, desktop, popup menus — otherwise
+  the clicked thing wouldn't be in the picture).
 - **Visible click** — the real cursor plus a drawn marker land in the image.
 - **Element-level description** — “Left click on button ‘Save’ in window …”,
   resolved from the accessibility tree (AT-SPI on Linux, UI Automation on
@@ -48,7 +50,7 @@ v0.1 items below are shipped in the alpha.
 | R12 | **i18n**, simple to extend (English + German) | ✅ shipped |
 | R13 | Released as **alpha**, English UI, permissive (0BSD) | ✅ shipped |
 | R14 | **Export** to PDF and Word (like comparable tools) | ✅ shipped (0.2) |
-| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 milestone 0.3 |
+| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 implemented on `feature/windows-backend`; rebase + runtime testing pending |
 
 ## Platform support matrix
 
@@ -60,10 +62,12 @@ v0.1 items below are shipped in the alpha.
 | Element names     | AT-SPI                | UI Automation      | AX API |
 | Tray              | ksni (StatusNotifierItem) | `Shell_NotifyIcon` | `NSStatusItem` |
 
-The platform-specific parts sit behind traits (`ClickSource`,
-`WindowCapturer`, `CursorTracker`, `ElementResolver`); each OS provides one
-backend, while the shared parts (`model`, `report`, `annotate`, `i18n`) stay
-platform-neutral.
+The platform-specific parts sit behind traits — `ClickSource` and
+`WindowCapturer` exist on `main` today; cursor tracking and element resolution
+are still KDE-typed and get their traits with the 0.3 platform split (already
+drafted as `platform.rs` on the `feature/windows-backend` branch). Each OS
+provides one backend, while the shared parts (`model`, `report`, `annotate`,
+`i18n`) stay platform-neutral.
 
 ## Milestones
 
@@ -96,6 +100,11 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
       `--version`, weekly `cargo audit` in CI, unit tests for the pure helpers.
 
 ### 0.3 — Windows backend
+Drafted on the [`feature/windows-backend`](https://github.com/joshii-h/stepshot/tree/feature/windows-backend)
+branch (`platform.rs` traits + `src/win/`, compiles in a Windows CI job). Still
+to do before it lands: rebase onto current `main` (full-screen capture,
+stop-gesture trim, hotplug, `is_screen` model change) and runtime testing on a
+real Windows machine.
 - [ ] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
 - [ ] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
 - [ ] Cursor + window geometry (`GetCursorPos`, `GetForegroundWindow`,
@@ -116,5 +125,6 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
 ## Non-goals
 
 - No background daemon, no auto-start, no cloud sync, no telemetry.
-- No full-desktop or video recording — single-window stills only.
+- No video recording — stills only (per-window; the full screen only when a
+  panel/popup click demands it).
 - No bundled browser engine just to render PDFs (exports stay native/pure-Rust).
