@@ -140,12 +140,15 @@ session" opens the report as the native entry point. Each session also gains a
 - [ ] Reorder steps (cheap in the editor; BetterStepsRecorder/OpenSteps ship it).
 
 ### 0.5 — Capture polish
-- [ ] Double-click merge: two rapid clicks at the same spot become one
-      “double click” step instead of two near-identical ones.
-- [ ] Pause/resume from the tray menu.
-- [ ] Click filtering (e.g. ignore configurable buttons).
+- [x] Double-click merge: two rapid clicks of the same button within
+      `[capture] double_click_ms` (default 400 ms) become one “double click”
+      step instead of two near-identical ones.
+- [x] Pause/resume from the tray menu (keeps the session; drops clicks while
+      paused).
+- [x] Click filtering: `[capture] buttons` selects which mouse buttons record.
 - [ ] Drag & drop as a step type (press → release at different points).
-- [ ] Process name (in addition to the window title) in the step metadata.
+- [x] Process name (`resourceClass`, in addition to the window title) in the
+      step metadata and reports.
 
 ### 0.6 — Configuration & export selection (shipped)
 - [x] Config file (`~/.config/stepshot/config.toml`) — dependency-free

@@ -36,7 +36,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tray::{Cmd, StepshotTray};
 
 const USAGE: &str = "\
@@ -88,12 +88,14 @@ fn main() -> Result<()> {
 
     // Shared state with the tray.
     let recording = Arc::new(AtomicBool::new(false));
+    let paused = Arc::new(AtomicBool::new(false));
     let steps_count = Arc::new(AtomicUsize::new(0));
     let (cmd_tx, cmd_rx) = mpsc::channel::<Cmd>();
 
     let handle = StepshotTray {
         tx: cmd_tx.clone(),
         recording: recording.clone(),
+        paused: paused.clone(),
         steps: steps_count.clone(),
     }
     .spawn()
@@ -127,6 +129,8 @@ fn main() -> Result<()> {
 
     let mut session: Option<Session> = None;
     let mut last_dir: Option<PathBuf> = None;
+    // The last recorded click (button + time), for double-click merging.
+    let mut last_click: Option<(model::Button, Instant)> = None;
     let mut run = true;
 
     while run {
@@ -151,7 +155,9 @@ fn main() -> Result<()> {
                         steps: Vec::new(),
                     });
                     last_dir = Some(dir);
+                    last_click = None;
                     steps_count.store(0, Ordering::SeqCst);
+                    paused.store(false, Ordering::SeqCst);
                     recording.store(true, Ordering::SeqCst);
                     handle.update(|_| {});
                     // Don't record the clicks on the tray menu itself.
@@ -179,6 +185,25 @@ fn main() -> Result<()> {
                                 .notify_stopped
                                 .replace("{n}", &s.steps.len().to_string());
                             notify::notify(c, "stepshot", &msg, "stepshot");
+                        }
+                    }
+                }
+                Cmd::TogglePause => {
+                    if session.is_some() {
+                        let now_paused = !paused.load(Ordering::SeqCst);
+                        paused.store(now_paused, Ordering::SeqCst);
+                        // The clicks operating this menu must not become steps,
+                        // and a merge must not span the pause boundary.
+                        drain_clicks(&click_rx);
+                        last_click = None;
+                        handle.update(|_| {});
+                        if let Some(c) = &notify_conn {
+                            let msg = if now_paused {
+                                i18n::tr().notify_paused
+                            } else {
+                                i18n::tr().notify_resumed
+                            };
+                            notify::notify(c, "stepshot", msg, "stepshot");
                         }
                     }
                 }
@@ -214,23 +239,43 @@ fn main() -> Result<()> {
         match click_rx.recv_timeout(Duration::from_millis(150)) {
             Ok(click) => {
                 if let Some(s) = session.as_mut() {
-                    let index = s.steps.len() + 1;
-                    match capture_step(
-                        index,
-                        click.button,
-                        &s.dir,
-                        &capturer,
-                        &cursor,
-                        &atspi,
-                        &config.marker,
-                    ) {
-                        Ok(step) => {
-                            s.steps.push(step);
-                            steps_count.store(s.steps.len(), Ordering::SeqCst);
-                            let _ =
-                                report::write_reports(&s.dir, &s.steps, &s.started, &config.export);
+                    let now = Instant::now();
+                    // Skip while paused or when this button isn't recorded.
+                    if paused.load(Ordering::SeqCst) || !config.capture.records(click.button) {
+                        // dropped — no step, last_click untouched
+                    } else if is_double_click(last_click, click.button, now, &config) {
+                        // Two rapid clicks of the same button → one double-click
+                        // step. Upgrade the previous step instead of capturing a
+                        // near-identical second screenshot.
+                        if let Some(step) = s.steps.last_mut() {
+                            step.double = true;
                         }
-                        Err(e) => eprintln!("[stepshot] step {index}: {e:#}"),
+                        let _ = report::write_reports(&s.dir, &s.steps, &s.started, &config.export);
+                        last_click = None; // don't chain a third click into it
+                    } else {
+                        let index = s.steps.len() + 1;
+                        match capture_step(
+                            index,
+                            click.button,
+                            &s.dir,
+                            &capturer,
+                            &cursor,
+                            &atspi,
+                            &config.marker,
+                        ) {
+                            Ok(step) => {
+                                s.steps.push(step);
+                                steps_count.store(s.steps.len(), Ordering::SeqCst);
+                                let _ = report::write_reports(
+                                    &s.dir,
+                                    &s.steps,
+                                    &s.started,
+                                    &config.export,
+                                );
+                                last_click = Some((click.button, now));
+                            }
+                            Err(e) => eprintln!("[stepshot] step {index}: {e:#}"),
+                        }
                     }
                 }
             }
@@ -242,6 +287,24 @@ fn main() -> Result<()> {
     let _ = handle.shutdown();
     eprintln!("stepshot stopped.");
     Ok(())
+}
+
+/// Whether `button` clicked at `now` completes a double-click with the last
+/// recorded click — same button, within the configured window (0 disables it).
+fn is_double_click(
+    last: Option<(model::Button, Instant)>,
+    button: model::Button,
+    now: Instant,
+    config: &Config,
+) -> bool {
+    let window = config.capture.double_click_ms;
+    if window == 0 {
+        return false;
+    }
+    match last {
+        Some((b, t)) => b == button && now.duration_since(t).as_millis() as u64 <= window,
+        None => false,
+    }
 }
 
 /// Drain all queued clicks, returning how many were discarded.

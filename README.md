@@ -102,6 +102,10 @@ stepshot --write-config   # → ~/.config/stepshot/config.toml (never overwrites
 
 [export]                # which report formats to write (default: all)
 # formats = ["html", "md", "pdf", "docx"]
+
+[capture]               # click handling
+# buttons = ["left", "right", "middle"]   # which buttons record (default: all)
+# double_click_ms = 400 # merge two rapid same-button clicks into one step (0 = off)
 ```
 
 Colors are `"#RRGGBB"`, alpha is `0.0`–`1.0`. A missing or malformed file falls

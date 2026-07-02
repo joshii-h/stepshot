@@ -56,23 +56,39 @@ pub struct Step {
     pub image_file: String,
     /// Window title, if the capture backend could resolve it.
     pub window_title: Option<String>,
+    /// Owning application / process name (KWin `resourceClass`), if available.
+    pub process: Option<String>,
     /// Description of the clicked UI element (AT-SPI), if available.
     pub element: Option<String>,
     /// The screenshot shows the whole screen, not a single window (panel,
     /// desktop or popup-menu click).
     pub is_screen: bool,
+    /// Two rapid clicks of the same button merged into a single double-click
+    /// step (see `capture.double_click_ms`).
+    pub double: bool,
 }
 
 impl Step {
+    /// The action verb for this step: the per-button label, or the double-click
+    /// label when two rapid clicks were merged.
+    fn action_label(&self) -> &'static str {
+        if self.double {
+            crate::i18n::tr().click_double
+        } else {
+            self.button.label()
+        }
+    }
+
     /// One-line description of what happened in this step (localized).
     pub fn describe(&self) -> String {
         let t = crate::i18n::tr();
+        let verb = self.action_label();
         let action = match &self.element {
             Some(el) if !el.is_empty() => t
                 .action_on
-                .replace("{action}", self.button.label())
+                .replace("{action}", verb)
                 .replace("{element}", el),
-            _ => self.button.label().to_string(),
+            _ => verb.to_string(),
         };
         match &self.window_title {
             Some(title) if !title.is_empty() => t
@@ -105,8 +121,10 @@ mod tests {
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: window_title.map(String::from),
+            process: None,
             element: element.map(String::from),
             is_screen: false,
+            double: false,
         }
     }
 
@@ -126,6 +144,16 @@ mod tests {
         assert_eq!(
             step(Some(""), Some("")).describe(),
             "Left click in the active window"
+        );
+    }
+
+    #[test]
+    fn describe_double_click() {
+        let mut s = step(Some("Editor"), Some("button “Save”"));
+        s.double = true;
+        assert_eq!(
+            s.describe(),
+            "Double click on button “Save” in window “Editor”"
         );
     }
 

@@ -251,8 +251,10 @@ mod tests {
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: Some("Test “Window” — café".into()),
+            process: None,
             element: Some("button “Save”".into()),
             is_screen: false,
+            double: false,
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let pdf = dir.join("report.pdf");

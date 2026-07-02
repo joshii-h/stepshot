@@ -8,6 +8,7 @@
 //! back to defaults with a warning rather than aborting startup.
 
 use crate::annotate::MarkerStyle;
+use crate::model::Button;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
@@ -21,6 +22,34 @@ pub struct Config {
     pub marker: MarkerStyle,
     /// `[export]` — which report formats to write.
     pub export: ExportConfig,
+    /// `[capture]` — click handling (filtering, double-click merge).
+    pub capture: CaptureConfig,
+}
+
+/// Click-capture behavior.
+#[derive(Debug, Clone)]
+pub struct CaptureConfig {
+    /// Which mouse buttons create steps. Clicks of other buttons are ignored.
+    pub buttons: Vec<Button>,
+    /// Two clicks of the same button within this many milliseconds merge into a
+    /// single “double click” step. `0` disables merging.
+    pub double_click_ms: u64,
+}
+
+impl Default for CaptureConfig {
+    fn default() -> Self {
+        Self {
+            buttons: vec![Button::Left, Button::Right, Button::Middle],
+            double_click_ms: 400,
+        }
+    }
+}
+
+impl CaptureConfig {
+    /// Whether a click of `button` should be recorded.
+    pub fn records(&self, button: Button) -> bool {
+        self.buttons.contains(&button)
+    }
 }
 
 /// Which report formats get written.
@@ -113,6 +142,16 @@ impl Config {
             }
         }
 
+        if let Some(ms) = toml.u64("capture", "double_click_ms") {
+            cfg.capture.double_click_ms = ms;
+        }
+        if let Some(list) = toml.string_array("capture", "buttons") {
+            let buttons: Vec<Button> = list.iter().filter_map(|s| parse_button(s)).collect();
+            if !buttons.is_empty() {
+                cfg.capture.buttons = buttons;
+            }
+        }
+
         cfg
     }
 
@@ -161,6 +200,13 @@ const EXAMPLE_TOML: &str = "\
 [export]
 # Which report formats to write. Default: all of them.
 # formats = [\"html\", \"md\", \"pdf\", \"docx\"]
+
+[capture]
+# Which mouse buttons create steps. Default: all three.
+# buttons = [\"left\", \"right\", \"middle\"]
+# Two clicks of the same button within this many milliseconds merge into one
+# \"double click\" step. Set to 0 to disable merging. Default: 400.
+# double_click_ms = 400
 ";
 
 // ─────────────────────────── minimal TOML subset ───────────────────────────
@@ -208,6 +254,10 @@ impl Toml {
         self.raw(section, key)?.trim().parse().ok()
     }
 
+    fn u64(&self, section: &str, key: &str) -> Option<u64> {
+        self.raw(section, key)?.trim().parse().ok()
+    }
+
     fn color(&self, section: &str, key: &str) -> Option<[u8; 3]> {
         parse_hex_color(&unquote(self.raw(section, key)?))
     }
@@ -236,6 +286,16 @@ fn unquote(s: &str) -> String {
         s[1..s.len() - 1].to_string()
     } else {
         s.to_string()
+    }
+}
+
+/// `left` / `right` / `middle` → [`Button`].
+fn parse_button(s: &str) -> Option<Button> {
+    match s.trim().to_lowercase().as_str() {
+        "left" => Some(Button::Left),
+        "right" => Some(Button::Right),
+        "middle" => Some(Button::Middle),
+        _ => None,
     }
 }
 
@@ -315,6 +375,30 @@ mod tests {
         assert_eq!(unquote("\"hi\""), "hi");
         assert_eq!(unquote("'hi'"), "hi");
         assert_eq!(unquote("bare"), "bare");
+    }
+
+    #[test]
+    fn capture_defaults_and_parsing() {
+        let d = Config::from_toml_str("");
+        assert_eq!(d.capture.double_click_ms, 400);
+        assert_eq!(d.capture.buttons.len(), 3);
+        assert!(d.capture.records(Button::Middle));
+
+        let c = Config::from_toml_str(
+            r#"
+            [capture]
+            buttons = ["left", "nope", "right"]
+            double_click_ms = 250
+            "#,
+        );
+        assert_eq!(c.capture.double_click_ms, 250);
+        assert_eq!(c.capture.buttons, vec![Button::Left, Button::Right]);
+        assert!(c.capture.records(Button::Left));
+        assert!(!c.capture.records(Button::Middle)); // filtered out
+
+        // An all-invalid button list keeps the default (all three).
+        let f = Config::from_toml_str("[capture]\nbuttons = [\"nope\"]\n");
+        assert_eq!(f.capture.buttons.len(), 3);
     }
 
     #[test]

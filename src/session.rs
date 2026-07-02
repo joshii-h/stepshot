@@ -101,8 +101,10 @@ pub fn capture_step(
         time: Local::now().format("%H:%M:%S").to_string(),
         image_file,
         window_title: cap.window_title,
+        process: cap.process,
         element,
         is_screen: cap.is_screen,
+        double: false,
     })
 }
 
@@ -187,8 +189,10 @@ mod tests {
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: window_title.map(String::from),
+            process: None,
             element: None,
             is_screen,
+            double: false,
         }
     }
 

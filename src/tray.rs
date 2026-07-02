@@ -17,6 +17,8 @@ use std::sync::mpsc::Sender;
 pub enum Cmd {
     Start,
     Stop,
+    /// Toggle pause while recording (stop capturing clicks, keep the session).
+    TogglePause,
     OpenFolder,
     /// Quit initiated from the tray menu — the clicks of that gesture are
     /// trimmed from the recording.
@@ -28,6 +30,7 @@ pub enum Cmd {
 pub struct StepshotTray {
     pub tx: Sender<Cmd>,
     pub recording: Arc<AtomicBool>,
+    pub paused: Arc<AtomicBool>,
     pub steps: Arc<AtomicUsize>,
 }
 
@@ -47,9 +50,12 @@ impl Tray for StepshotTray {
     fn tool_tip(&self) -> ksni::ToolTip {
         let t = crate::i18n::tr();
         let rec = self.recording.load(Ordering::SeqCst);
-        let desc = if rec {
-            t.tt_recording
-                .replace("{n}", &self.steps.load(Ordering::SeqCst).to_string())
+        let paused = self.paused.load(Ordering::SeqCst);
+        let n = self.steps.load(Ordering::SeqCst).to_string();
+        let desc = if rec && paused {
+            t.tt_paused.replace("{n}", &n)
+        } else if rec {
+            t.tt_recording.replace("{n}", &n)
         } else {
             t.tt_ready.to_string()
         };
@@ -64,10 +70,13 @@ impl Tray for StepshotTray {
     fn menu(&self) -> Vec<MenuItem<Self>> {
         let t = crate::i18n::tr();
         let rec = self.recording.load(Ordering::SeqCst);
+        let paused = self.paused.load(Ordering::SeqCst);
+        let n = self.steps.load(Ordering::SeqCst).to_string();
 
-        let header = if rec {
-            t.tray_recording
-                .replace("{n}", &self.steps.load(Ordering::SeqCst).to_string())
+        let header = if rec && paused {
+            t.tray_paused.replace("{n}", &n)
+        } else if rec {
+            t.tray_recording.replace("{n}", &n)
         } else {
             t.tray_ready.to_string()
         };
@@ -94,7 +103,7 @@ impl Tray for StepshotTray {
             .into()
         };
 
-        vec![
+        let mut items: Vec<MenuItem<Self>> = vec![
             StandardItem {
                 label: header,
                 enabled: false,
@@ -103,6 +112,29 @@ impl Tray for StepshotTray {
             .into(),
             MenuItem::Separator,
             toggle,
+        ];
+
+        // Pause/resume only makes sense while a recording is running.
+        if rec {
+            let (label, icon_name) = if paused {
+                (t.menu_resume, "media-playback-start")
+            } else {
+                (t.menu_pause, "media-playback-pause")
+            };
+            items.push(
+                StandardItem {
+                    label: label.into(),
+                    icon_name: icon_name.into(),
+                    activate: Box::new(|t: &mut StepshotTray| {
+                        let _ = t.tx.send(Cmd::TogglePause);
+                    }),
+                    ..Default::default()
+                }
+                .into(),
+            );
+        }
+
+        items.extend([
             StandardItem {
                 label: t.menu_open_folder.into(),
                 icon_name: "folder-open".into(),
@@ -122,6 +154,7 @@ impl Tray for StepshotTray {
                 ..Default::default()
             }
             .into(),
-        ]
+        ]);
+        items
     }
 }

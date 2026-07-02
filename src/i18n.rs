@@ -67,6 +67,7 @@ pub struct Strings {
     pub click_left: &'static str,
     pub click_right: &'static str,
     pub click_middle: &'static str,
+    pub click_double: &'static str, // action verb for a merged double-click
 
     // Step description.
     pub action_on: &'static str,        // "{action} on {element}"
@@ -78,16 +79,22 @@ pub struct Strings {
     // Tray.
     pub tray_ready: &'static str,
     pub tray_recording: &'static str, // "● Recording — {n} step(s)"
+    pub tray_paused: &'static str,    // "❚❚ Paused — {n} step(s)"
     pub tt_ready: &'static str,
     pub tt_recording: &'static str, // "Recording — {n} step(s)"
+    pub tt_paused: &'static str,    // "Paused — {n} step(s)"
     pub menu_start: &'static str,
     pub menu_stop: &'static str,
+    pub menu_pause: &'static str,
+    pub menu_resume: &'static str,
     pub menu_open_folder: &'static str,
     pub menu_quit: &'static str,
 
     // Notifications.
     pub notify_started: &'static str,
     pub notify_stopped: &'static str, // "Recording stopped — {n} step(s). Report saved."
+    pub notify_paused: &'static str,  // "Recording paused."
+    pub notify_resumed: &'static str, // "Recording resumed."
     pub notify_no_input: &'static str, // click capture unavailable (input group?)
 
     // Report.

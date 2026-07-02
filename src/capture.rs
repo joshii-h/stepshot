@@ -26,6 +26,9 @@ const READ_DEADLINE: Duration = Duration::from_secs(10);
 pub struct Capture {
     pub image: RgbaImage,
     pub window_title: Option<String>,
+    /// The clicked window's application/process name (KWin `resourceClass`,
+    /// e.g. `org.kde.korganizer`), if resolvable. `None` for screen captures.
+    pub process: Option<String>,
     /// Scale factor (HiDPI): image pixels = logical coords * scale.
     pub scale: f64,
     /// True when this is a full-screen capture instead of a window capture —
@@ -150,14 +153,19 @@ impl KdeCapturer {
         let image = decode_qimage(&raw, width, height, stride, format)
             .context("could not decode raw image")?;
 
-        // ScreenShot2 reports the windowId (UUID); we use it to get the title.
-        let window_title = get_string(&results, "windowId").and_then(|id| self.window_caption(&id));
+        // ScreenShot2 reports the windowId (UUID); we use it to get the title
+        // and the owning application's resource class.
+        let (window_title, process) = match get_string(&results, "windowId") {
+            Some(id) => self.window_info(&id),
+            None => (None, None),
+        };
 
         let scale = get_f64(&results, "scale").unwrap_or(1.0);
 
         Ok(Capture {
             image,
             window_title,
+            process,
             scale,
             is_screen: false,
         })
@@ -165,25 +173,30 @@ impl KdeCapturer {
 }
 
 impl KdeCapturer {
-    /// Resolve the window title for a UUID via `org.kde.KWin.getWindowInfo`.
-    fn window_caption(&self, window_id: &str) -> Option<String> {
-        let reply = self
-            .conn
-            .call_method(
-                Some("org.kde.KWin"),
-                "/KWin",
-                Some("org.kde.KWin"),
-                "getWindowInfo",
-                &(window_id,),
-            )
-            .ok()?;
-        let info: HashMap<String, OwnedValue> = reply.body().deserialize().ok()?;
-        let caption = get_string(&info, "caption")?;
-        if caption.is_empty() {
-            None
-        } else {
-            Some(caption)
-        }
+    /// Resolve `(caption, resourceClass)` for a window UUID via
+    /// `org.kde.KWin.getWindowInfo`. The caption is the window title; the
+    /// resource class is the owning application's identifier (e.g.
+    /// `org.kde.korganizer`, `firefox`). Either may be absent.
+    fn window_info(&self, window_id: &str) -> (Option<String>, Option<String>) {
+        let Ok(reply) = self.conn.call_method(
+            Some("org.kde.KWin"),
+            "/KWin",
+            Some("org.kde.KWin"),
+            "getWindowInfo",
+            &(window_id,),
+        ) else {
+            return (None, None);
+        };
+        let Ok(info) = reply.body().deserialize::<HashMap<String, OwnedValue>>() else {
+            return (None, None);
+        };
+        let nonempty = |s: String| if s.is_empty() { None } else { Some(s) };
+        let caption = get_string(&info, "caption").and_then(nonempty);
+        // Prefer the reverse-DNS resourceClass; fall back to resourceName.
+        let process = get_string(&info, "resourceClass")
+            .and_then(nonempty)
+            .or_else(|| get_string(&info, "resourceName").and_then(nonempty));
+        (caption, process)
     }
 }
 

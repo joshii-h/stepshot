@@ -78,8 +78,12 @@ fn render_markdown(steps: &[Step], started: &str) -> String {
     ));
     for s in steps {
         let step_label = t.report_step.replace("{n}", &s.index.to_string());
+        let app = match &s.process {
+            Some(p) if !p.is_empty() => format!(" · `{}`", md_escape(p)),
+            _ => String::new(),
+        };
         out.push_str(&format!(
-            "## {step_label} — {}\n\n*{}*\n\n![{step_label}]({})\n\n",
+            "## {step_label} — {}{app}\n\n*{}*\n\n![{step_label}]({})\n\n",
             s.time,
             md_escape(&s.describe()),
             s.image_file
@@ -114,10 +118,16 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
         } else {
             html_escape(&s.image_file)
         };
+        let meta_line = match &s.process {
+            Some(p) if !p.is_empty() => {
+                format!("{} · {}", html_escape(&s.time), html_escape(p))
+            }
+            _ => html_escape(&s.time),
+        };
         cards.push_str(&format!(
             r#"  <section class="step">
     <div class="head"><span class="num">{n}</span>
-      <div><p class="desc">{desc}</p><p class="time">{time}</p></div>
+      <div><p class="desc">{desc}</p><p class="time">{meta_line}</p></div>
     </div>
     <img src="{src}" alt="{alt}" loading="lazy">
   </section>
@@ -125,7 +135,7 @@ fn render_html(steps: &[Step], started: &str, dir: &Path, embed: bool) -> String
             n = s.index,
             alt = html_escape(&t.report_step.replace("{n}", &s.index.to_string())),
             desc = html_escape(&s.describe()),
-            time = html_escape(&s.time),
+            meta_line = meta_line,
             src = src,
         ));
     }
