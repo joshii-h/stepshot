@@ -50,7 +50,7 @@ v0.1 items below are shipped in the alpha.
 | R12 | **i18n**, simple to extend (English + German) | ✅ shipped |
 | R13 | Released as **alpha**, English UI, permissive (0BSD) | ✅ shipped |
 | R14 | **Export** to PDF and Word (like comparable tools) | ✅ shipped (0.2) |
-| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 implemented on `feature/windows-backend`; rebase + runtime testing pending |
+| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 implemented on `feature/windows-backend` (in sync with `main`); live testing pending |
 
 ## Platform support matrix
 
