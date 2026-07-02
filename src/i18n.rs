@@ -35,9 +35,13 @@ impl Lang {
             .iter()
             .find_map(|k| std::env::var(k).ok())
             .filter(|s| !s.is_empty())
-            .unwrap_or_default()
-            .to_lowercase();
-        if v.starts_with("de") {
+            .unwrap_or_default();
+        Self::from_locale(&v)
+    }
+
+    /// Map a locale value (e.g. `de_CH.UTF-8`, `de:en_US`) to a language.
+    fn from_locale(v: &str) -> Self {
+        if v.to_lowercase().starts_with("de") {
             Lang::De
         } else {
             Lang::En
@@ -59,6 +63,7 @@ pub struct Strings {
     pub action_on: &'static str,        // "{action} on {element}"
     pub in_window: &'static str,        // "{action} in window “{title}”"
     pub in_active_window: &'static str, // "{action} in the active window"
+    pub in_screen: &'static str,        // "{action} (full-screen view)" — panel/menu/desktop clicks
     pub element_generic: &'static str,  // fallback element word
 
     // Tray.
@@ -103,4 +108,20 @@ pub fn init() {
 /// The active string table (English until [`init`] runs).
 pub fn tr() -> &'static Strings {
     CURRENT.get().copied().unwrap_or(&en::STRINGS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn locale_mapping() {
+        assert!(Lang::from_locale("de_CH.UTF-8") == Lang::De);
+        assert!(Lang::from_locale("DE") == Lang::De);
+        assert!(Lang::from_locale("de:en_US") == Lang::De);
+        assert!(Lang::from_locale("en_US.UTF-8") == Lang::En);
+        assert!(Lang::from_locale("fr_FR") == Lang::En); // unsupported → fallback
+        assert!(Lang::from_locale("") == Lang::En);
+        assert!(Lang::from_locale("C") == Lang::En);
+    }
 }

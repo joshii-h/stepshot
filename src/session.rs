@@ -31,7 +31,7 @@ pub fn finalize(s: &Session) {
     }
 }
 
-/// Captures one step: get cursor → photograph window → resolve element
+/// Captures one step: get cursor → photograph window/screen → resolve element
 /// → draw marker → save.
 pub fn capture_step(
     index: usize,
@@ -43,18 +43,29 @@ pub fn capture_step(
 ) -> Result<Step> {
     let ci = cursor.as_ref().and_then(|c| c.fetch());
 
-    let mut cap = capturer.capture_active_window().context("capture failed")?;
+    // A window capture only shows the active window's own surface. It misses
+    // the click whenever the click didn't go there: panel/desktop clicks (the
+    // panel never becomes the "active window") and clicks inside popups
+    // (context menus are separate Wayland surfaces, invisible in a capture of
+    // their parent). In those cases capture the monitor under the cursor.
+    let needs_screen = ci
+        .as_ref()
+        .is_some_and(|c| c.in_popup || !c.in_active_window());
+
+    let mut cap = if needs_screen {
+        let mut cap =
+            capture_cursor_screen(capturer, ci.as_ref()).context("screen capture failed")?;
+        cap.is_screen = true;
+        cap
+    } else {
+        capturer.capture_active_window().context("capture failed")?
+    };
 
     // An invisible active window (KWin's Xwayland video bridge, or the bare
     // desktop) yields a blank image. Fall back to the monitor under the cursor
-    // so the panel/tray you actually clicked is captured; if the cursor's output
-    // is unknown, use the active screen.
-    if crate::capture::is_blank(&cap.image) {
-        cap = match ci.as_ref() {
-            Some(c) if !c.screen.is_empty() => capturer.capture_screen(&c.screen),
-            _ => capturer.capture_active_screen(),
-        }
-        .context("screen capture failed")?;
+    // so what you actually clicked is captured.
+    if !cap.is_screen && crate::capture::is_blank(&cap.image) {
+        cap = capture_cursor_screen(capturer, ci.as_ref()).context("screen capture failed")?;
         cap.is_screen = true;
     }
 
@@ -88,7 +99,46 @@ pub fn capture_step(
         image_file,
         window_title: cap.window_title,
         element,
+        is_screen: cap.is_screen,
     })
+}
+
+/// Capture the monitor under the cursor; if its output name is unknown, the
+/// active screen as a last resort.
+fn capture_cursor_screen(
+    capturer: &KdeCapturer,
+    ci: Option<&crate::cursor::CursorInfo>,
+) -> Result<crate::capture::Capture> {
+    match ci {
+        Some(c) if !c.screen.is_empty() => capturer.capture_screen(&c.screen),
+        _ => capturer.capture_active_screen(),
+    }
+}
+
+/// Removes the trailing steps produced by the stop gesture itself: the click
+/// on the tray icon (panel → full-screen capture, no window title) and the
+/// click on the stop/quit menu item (popup → full-screen capture). AT-SPI
+/// can't identify these clicks (plasmashell exposes them only as generic
+/// "layered pane"), so this trims by their capture shape instead.
+///
+/// `pending` is the number of clicks that were still unprocessed when the
+/// command arrived and were discarded before capture — each one is a gesture
+/// click that never became a step, so it reduces how many steps to trim.
+///
+/// Returns the removed steps so the caller can delete their screenshots.
+pub fn trim_stop_gesture(steps: &mut Vec<Step>, pending: usize) -> Vec<Step> {
+    let mut removed = Vec::new();
+    for _ in 0..2usize.saturating_sub(pending) {
+        if steps
+            .last()
+            .is_some_and(|s| s.is_screen && s.window_title.is_none())
+        {
+            removed.extend(steps.pop());
+        } else {
+            break;
+        }
+    }
+    removed
 }
 
 /// Base folder for sessions: optional CLI argument, otherwise ~/Pictures/stepshot.
@@ -100,4 +150,68 @@ pub fn output_base() -> Result<PathBuf> {
     }
     let home = std::env::var_os("HOME").context("HOME is not set")?;
     Ok(PathBuf::from(home).join("Pictures").join("stepshot"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn step(is_screen: bool, window_title: Option<&str>) -> Step {
+        Step {
+            index: 1,
+            button: Button::Left,
+            time: "12:00:00".into(),
+            image_file: "step-001.png".into(),
+            window_title: window_title.map(String::from),
+            element: None,
+            is_screen,
+        }
+    }
+
+    #[test]
+    fn trims_the_two_gesture_steps() {
+        // window click, tray-icon click, menu-item click
+        let mut steps = vec![
+            step(false, Some("Editor")),
+            step(true, None),
+            step(true, None),
+        ];
+        trim_stop_gesture(&mut steps, 0);
+        assert_eq!(steps.len(), 1);
+    }
+
+    #[test]
+    fn keeps_a_legit_screen_step_before_the_gesture() {
+        // start-menu click (legit), then the two gesture clicks
+        let mut steps = vec![step(true, None), step(true, None), step(true, None)];
+        trim_stop_gesture(&mut steps, 0);
+        assert_eq!(steps.len(), 1); // trims at most two
+    }
+
+    #[test]
+    fn stops_at_window_steps() {
+        let mut steps = vec![step(false, Some("Editor")), step(false, Some("Editor"))];
+        trim_stop_gesture(&mut steps, 0);
+        assert_eq!(steps.len(), 2);
+    }
+
+    #[test]
+    fn pending_clicks_reduce_the_trim() {
+        // The menu-item click was still in the channel (never captured):
+        // only the tray-icon step exists and only it may be trimmed.
+        let mut steps = vec![step(true, None), step(true, None)];
+        trim_stop_gesture(&mut steps, 1);
+        assert_eq!(steps.len(), 1);
+        // Both gesture clicks pending → nothing to trim.
+        let mut steps = vec![step(true, None)];
+        trim_stop_gesture(&mut steps, 2);
+        assert_eq!(steps.len(), 1);
+    }
+
+    #[test]
+    fn screen_steps_with_title_are_not_gesture_clicks() {
+        let mut steps = vec![step(true, Some("Some Window"))];
+        trim_stop_gesture(&mut steps, 0);
+        assert_eq!(steps.len(), 1);
+    }
 }

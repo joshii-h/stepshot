@@ -89,6 +89,7 @@ mod tests {
             image_file: "step-001.png".into(),
             window_title: Some("Test Window 😀 — café".into()),
             element: Some("button “Save”".into()),
+            is_screen: false,
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let f = dir.join("report.docx");

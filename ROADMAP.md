@@ -83,6 +83,17 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
       bare desktop), capturing the **monitor under the cursor** (multi-monitor).
 - [x] One file per language under `src/i18n/`; `main.rs` split into
       `session.rs` + `selftest.rs`.
+- [x] Full-screen capture when the click doesn't land in the active window —
+      panel/desktop clicks (start menu, taskbar) and clicks inside **popups**
+      (context menus are separate Wayland surfaces, invisible in a window
+      capture of their parent).
+- [x] The stop gesture (tray icon + stop menu item) no longer ends up in the
+      report; its steps and screenshots are trimmed on stop/quit.
+- [x] Input hotplug: mice plugged in (or re-plugged) while running are picked
+      up by a periodic `/dev/input` rescan.
+- [x] Code-review hardening: KWin script in `XDG_RUNTIME_DIR`, capture read
+      deadline, AT-SPI screen-reader flag restored correctly, `--help`/
+      `--version`, weekly `cargo audit` in CI, unit tests for the pure helpers.
 
 ### 0.3 — Windows backend
 - [ ] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).

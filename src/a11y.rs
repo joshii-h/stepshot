@@ -49,6 +49,10 @@ pub struct Atspi {
     session: zbus::blocking::Connection,
     /// Previous IsEnabled state, to restore it.
     prev_enabled: Option<bool>,
+    /// Previous ScreenReaderEnabled state, tracked separately: IsEnabled may
+    /// already be on while the screen-reader flag is off, and leaving the
+    /// latter set makes apps behave as if a screen reader were running.
+    prev_screen_reader: Option<bool>,
 }
 
 impl Atspi {
@@ -77,20 +81,24 @@ impl Atspi {
             probe: Probe { bus },
             session,
             prev_enabled: None,
+            prev_screen_reader: None,
         })
     }
 
-    /// Enables AT-SPI system-wide (remembering the previous state).
+    /// Enables AT-SPI system-wide (remembering the previous state of both flags).
     pub fn enable(&mut self) {
         self.prev_enabled = self.get_status_bool("IsEnabled");
+        self.prev_screen_reader = self.get_status_bool("ScreenReaderEnabled");
         self.set_status_bool("IsEnabled", true);
         self.set_status_bool("ScreenReaderEnabled", true);
     }
 
-    /// Restores the previous a11y state.
+    /// Restores the previous a11y state (each flag independently).
     pub fn restore(&self) {
         if let Some(false) = self.prev_enabled {
             self.set_status_bool("IsEnabled", false);
+        }
+        if let Some(false) = self.prev_screen_reader {
             self.set_status_bool("ScreenReaderEnabled", false);
         }
     }

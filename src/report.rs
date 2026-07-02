@@ -62,9 +62,22 @@ fn render_markdown(steps: &[Step], started: &str) -> String {
         out.push_str(&format!(
             "## {step_label} — {}\n\n*{}*\n\n![{step_label}]({})\n\n",
             s.time,
-            s.describe(),
+            md_escape(&s.describe()),
             s.image_file
         ));
+    }
+    out
+}
+
+/// Escape Markdown syntax in free text (window titles, element names) so a
+/// title containing `*`, `_`, brackets etc. doesn't reformat the report.
+fn md_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if matches!(c, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '#') {
+            out.push('\\');
+        }
+        out.push(c);
     }
     out
 }
@@ -173,4 +186,45 @@ fn html_escape(s: &str) -> String {
         .replace('<', "&lt;")
         .replace('>', "&gt;")
         .replace('"', "&quot;")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// RFC 4648 test vectors — the hand-rolled encoder feeds every embedded
+    /// image in the final report, so it gets the canonical vectors.
+    #[test]
+    fn base64_rfc4648_vectors() {
+        assert_eq!(base64(b""), "");
+        assert_eq!(base64(b"f"), "Zg==");
+        assert_eq!(base64(b"fo"), "Zm8=");
+        assert_eq!(base64(b"foo"), "Zm9v");
+        assert_eq!(base64(b"foob"), "Zm9vYg==");
+        assert_eq!(base64(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64(b"foobar"), "Zm9vYmFy");
+    }
+
+    #[test]
+    fn base64_binary_roundtrip_length() {
+        let data: Vec<u8> = (0..=255).collect();
+        let enc = base64(&data);
+        assert_eq!(enc.len(), data.len().div_ceil(3) * 4);
+        assert_eq!(&enc[..8], "AAECAwQF");
+    }
+
+    #[test]
+    fn html_escape_covers_markup() {
+        assert_eq!(
+            html_escape(r#"<a href="x">&</a>"#),
+            "&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;"
+        );
+    }
+
+    #[test]
+    fn md_escape_neutralizes_syntax() {
+        assert_eq!(md_escape("a*b_c"), r"a\*b\_c");
+        assert_eq!(md_escape("[x](y)"), r"\[x\](y)");
+        assert_eq!(md_escape("plain — text"), "plain — text");
+    }
 }

@@ -12,11 +12,12 @@ accessibility), and writes a **self-contained HTML report** describing each step
 
 It lives in the system tray; you start and stop recording from there.
 
-## Features (v0.1, alpha)
+## Features (alpha)
 
 - **Tray app**: runs in the system tray (camera icon, red dot while recording),
   start/stop from the tray menu — no terminal, no Ctrl+C needed.
-- **Global click capture** without root — reads evdev directly (`input` group is enough).
+- **Global click capture** without root — reads evdev directly (`input` group is
+  enough); mice plugged in while running are picked up automatically.
 - **Window screenshot** of the active window via `org.kde.KWin.ScreenShot2`
   (D-Bus, FD passing) — **no runtime dependency** like `spectacle`.
 - **Click marker** + the real mouse cursor baked into the image (KWin `include-cursor`).
@@ -154,7 +155,7 @@ Adding a language is deliberately simple and compiler-checked:
 
 See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones,
 or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOCX
-export shipped in 0.2; in short, next up:
+export (roadmap milestone 0.2) has already shipped; in short, next up:
 
 - **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3)
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):

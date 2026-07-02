@@ -1,8 +1,9 @@
 //! Tray icon (StatusNotifierItem) — the app's control center.
 //!
-//! The app lives in the tray; recording is started/stopped from here. The icon
-//! sits in the panel and is therefore never in the screenshots (we only
-//! photograph the active window). Menu actions send commands to the main loop.
+//! The app lives in the tray; recording is started/stopped from here. Menu
+//! actions send commands to the main loop. The clicks that operate this menu
+//! are kept out of the recording: on Start the queued clicks are drained, on
+//! Stop/Quit the trailing gesture steps are trimmed (`trim_stop_gesture`).
 
 use crate::icon;
 use ksni::menu::StandardItem;
@@ -12,12 +13,16 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::Sender;
 
 /// Control commands from the tray to the main loop.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Cmd {
     Start,
     Stop,
     OpenFolder,
+    /// Quit initiated from the tray menu — the clicks of that gesture are
+    /// trimmed from the recording.
     Quit,
+    /// Quit initiated by a signal (Ctrl+C) — no tray clicks to trim.
+    Terminate,
 }
 
 pub struct StepshotTray {

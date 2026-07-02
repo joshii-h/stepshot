@@ -37,7 +37,35 @@ use std::sync::mpsc;
 use std::time::Duration;
 use tray::{Cmd, StepshotTray};
 
+const USAGE: &str = "\
+stepshot — step recorder for KDE/Wayland (tray app)
+
+Usage: stepshot [OUTPUT_DIR]
+
+Arguments:
+  OUTPUT_DIR   base folder for sessions (default: ~/Pictures/stepshot)
+
+Options:
+  -h, --help      print this help
+  -V, --version   print the version";
+
 fn main() -> Result<()> {
+    match std::env::args().nth(1).as_deref() {
+        Some("-h" | "--help") => {
+            println!("{USAGE}");
+            return Ok(());
+        }
+        Some("-V" | "--version") => {
+            println!("stepshot {}", env!("CARGO_PKG_VERSION"));
+            return Ok(());
+        }
+        Some(flag) if flag.starts_with('-') => {
+            eprintln!("unknown option: {flag}\n\n{USAGE}");
+            std::process::exit(2);
+        }
+        _ => {}
+    }
+
     i18n::init();
 
     let capturer = KdeCapturer::connect()?;
@@ -84,7 +112,7 @@ fn main() -> Result<()> {
     {
         let cmd_tx = cmd_tx.clone();
         let _ = ctrlc::set_handler(move || {
-            let _ = cmd_tx.send(Cmd::Quit);
+            let _ = cmd_tx.send(Cmd::Terminate);
         });
     }
 
@@ -119,14 +147,20 @@ fn main() -> Result<()> {
                     steps_count.store(0, Ordering::SeqCst);
                     recording.store(true, Ordering::SeqCst);
                     handle.update(|_| {});
-                    // Don't record the click on the tray menu itself.
-                    while click_rx.try_recv().is_ok() {}
+                    // Don't record the clicks on the tray menu itself.
+                    drain_clicks(&click_rx);
                     if let Some(c) = &notify_conn {
                         notify::notify(c, "stepshot", i18n::tr().notify_started, "stepshot");
                     }
                 }
                 Cmd::Stop => {
-                    if let Some(s) = session.take() {
+                    if let Some(mut s) = session.take() {
+                        // Discard the gesture clicks that were still queued and
+                        // trim the ones already captured as steps.
+                        let pending = drain_clicks(&click_rx);
+                        for dropped in session::trim_stop_gesture(&mut s.steps, pending) {
+                            let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
+                        }
                         finalize(&s);
                         if let Some(a) = atspi.as_ref() {
                             a.restore();
@@ -146,8 +180,15 @@ fn main() -> Result<()> {
                         let _ = std::process::Command::new("xdg-open").arg(d).spawn();
                     }
                 }
-                Cmd::Quit => {
-                    if let Some(s) = session.take() {
+                Cmd::Quit | Cmd::Terminate => {
+                    if let Some(mut s) = session.take() {
+                        // Only a tray-initiated quit ends with tray clicks.
+                        if cmd == Cmd::Quit {
+                            let pending = drain_clicks(&click_rx);
+                            for dropped in session::trim_stop_gesture(&mut s.steps, pending) {
+                                let _ = std::fs::remove_file(s.dir.join(&dropped.image_file));
+                            }
+                        }
                         finalize(&s);
                         if let Some(a) = atspi.as_ref() {
                             a.restore();
@@ -185,4 +226,13 @@ fn main() -> Result<()> {
     let _ = handle.shutdown();
     eprintln!("stepshot stopped.");
     Ok(())
+}
+
+/// Drain all queued clicks, returning how many were discarded.
+fn drain_clicks(rx: &mpsc::Receiver<model::Click>) -> usize {
+    let mut n = 0;
+    while rx.try_recv().is_ok() {
+        n += 1;
+    }
+    n
 }

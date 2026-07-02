@@ -252,6 +252,7 @@ mod tests {
             image_file: "step-001.png".into(),
             window_title: Some("Test “Window” — café".into()),
             element: Some("button “Save”".into()),
+            is_screen: false,
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let pdf = dir.join("report.pdf");
@@ -264,5 +265,14 @@ mod tests {
     fn sanitize_maps_typography() {
         assert_eq!(sanitize("“hi” — café"), "\"hi\" - caf\u{e9}");
         assert_eq!(sanitize("emoji \u{1F600}"), "emoji ?");
+    }
+
+    #[test]
+    fn wrap_respects_max_width() {
+        let lines = wrap("aa bb cc dd", 5);
+        assert_eq!(lines, vec!["aa bb", "cc dd"]);
+        // A single over-long word still becomes its own line.
+        assert_eq!(wrap("abcdefghij", 5), vec!["abcdefghij"]);
+        assert_eq!(wrap("", 5), vec![""]);
     }
 }

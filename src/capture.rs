@@ -12,7 +12,15 @@ use image::RgbaImage;
 use std::collections::HashMap;
 use std::io::Read;
 use std::os::fd::AsFd;
+use std::sync::mpsc;
+use std::time::Duration;
 use zvariant::{Fd, OwnedValue, Value};
+
+/// Maximum time to wait for KWin to stream the image into the pipe. Normally
+/// this is near-instant (local pipe); the deadline only guards against a
+/// compositor that never closes its write end, which would otherwise hang the
+/// main loop forever.
+const READ_DEADLINE: Duration = Duration::from_secs(10);
 
 /// A captured window image plus optional context.
 pub struct Capture {
@@ -20,10 +28,12 @@ pub struct Capture {
     pub window_title: Option<String>,
     /// Scale factor (HiDPI): image pixels = logical coords * scale.
     pub scale: f64,
-    /// True when this is a full-screen fallback (the active "window" had no
-    /// visible content). The click marker is then skipped — the baked-in cursor
-    /// (`include-cursor`) already marks the spot, and the window-relative marker
-    /// math wouldn't apply to a whole-screen image.
+    /// True when this is a full-screen capture instead of a window capture —
+    /// used for clicks the active window wouldn't show (panel, desktop, popup
+    /// menus) and as fallback when the active "window" had no visible content.
+    /// The click marker is then skipped — the baked-in cursor (`include-cursor`)
+    /// already marks the spot, and the window-relative marker math wouldn't
+    /// apply to a whole-screen image.
     pub is_screen: bool,
 }
 
@@ -121,10 +131,20 @@ impl KdeCapturer {
         let stride = get_i64(&results, "stride").context("no 'stride' in reply")? as usize;
         let format = get_i64(&results, "format").unwrap_or(6); // 6 = ARGB32_Premultiplied
 
-        // Read the raw bytes from the pipe (height * stride).
-        let mut raw = Vec::with_capacity(stride.saturating_mul(height as usize));
-        reader
-            .read_to_end(&mut raw)
+        // Read the raw bytes from the pipe (height * stride) on a helper thread
+        // with a deadline — like the AT-SPI queries, a stuck read must not hang
+        // the recorder. On timeout the reader thread stays blocked in the
+        // background until KWin eventually closes the fd.
+        let expected = stride.saturating_mul(height as usize);
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let mut raw = Vec::with_capacity(expected);
+            let res = reader.read_to_end(&mut raw).map(|_| raw);
+            let _ = tx.send(res);
+        });
+        let raw = rx
+            .recv_timeout(READ_DEADLINE)
+            .context("timed out waiting for image data from KWin")?
             .context("could not read image data")?;
 
         let image = decode_qimage(&raw, width, height, stride, format)
@@ -273,5 +293,65 @@ fn get_f64(map: &HashMap<String, OwnedValue>, key: &str) -> Option<f64> {
         Value::I32(n) => Some(*n as f64),
         Value::U32(n) => Some(*n as f64),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// One BGRA pixel, optionally premultiplied, in a row padded to `stride`.
+    fn buf(pixel: [u8; 4], stride: usize) -> Vec<u8> {
+        let mut raw = vec![0u8; stride];
+        raw[..4].copy_from_slice(&pixel);
+        raw
+    }
+
+    #[test]
+    fn decode_swaps_bgra_to_rgba() {
+        // B=10, G=20, R=30, A=255 (format 5 = ARGB32, not premultiplied)
+        let img = decode_qimage(&buf([10, 20, 30, 255], 4), 1, 1, 4, 5).unwrap();
+        assert_eq!(img.get_pixel(0, 0).0, [30, 20, 10, 255]);
+    }
+
+    #[test]
+    fn decode_unpremultiplies_format_6() {
+        // Premultiplied with a=128: stored channel 64 ≈ original 127.
+        let img = decode_qimage(&buf([64, 64, 64, 128], 4), 1, 1, 4, 6).unwrap();
+        let p = img.get_pixel(0, 0).0;
+        assert_eq!(p[3], 128);
+        for c in &p[..3] {
+            assert!((126..=129).contains(c), "channel {c} should be ≈127");
+        }
+    }
+
+    #[test]
+    fn decode_respects_stride_padding() {
+        // stride 8 for a 1-px row: the pixel must come from the row start.
+        let img = decode_qimage(&buf([0, 0, 200, 255], 8), 1, 1, 8, 5).unwrap();
+        assert_eq!(img.get_pixel(0, 0).0[0], 200);
+    }
+
+    #[test]
+    fn decode_rejects_short_buffers_and_zero_sizes() {
+        assert!(decode_qimage(&[0u8; 4], 2, 2, 8, 5).is_err()); // too little data
+        assert!(decode_qimage(&[], 0, 1, 4, 5).is_err()); // zero width
+        assert!(decode_qimage(&[0u8; 4], 1, 1, 2, 5).is_err()); // stride < row
+    }
+
+    #[test]
+    fn blank_detection() {
+        let uniform = RgbaImage::from_pixel(200, 100, image::Rgba([37, 37, 37, 255]));
+        assert!(is_blank(&uniform));
+
+        let mut real = uniform.clone();
+        for y in 0..50 {
+            for x in 0..100 {
+                real.put_pixel(x, y, image::Rgba([200, 10, 10, 255]));
+            }
+        }
+        assert!(!is_blank(&real));
+
+        assert!(is_blank(&RgbaImage::new(0, 0)));
     }
 }

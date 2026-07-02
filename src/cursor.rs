@@ -22,8 +22,26 @@ pub struct CursorInfo {
     pub frame_y: i32,
     pub frame_w: i32,
     pub frame_h: i32,
+    /// The cursor is over a popup surface (context menu, dropdown — not a
+    /// tooltip). Popups are separate Wayland surfaces and never show up in a
+    /// window capture of their parent, so such clicks need a screen capture.
+    pub in_popup: bool,
     /// KWin output name under the cursor (e.g. `DP-5`); empty if unknown.
     pub screen: String,
+}
+
+impl CursorInfo {
+    /// Is the cursor inside the active window's frame rect? False also when
+    /// there is no active window (frame is 0×0) — e.g. a click on the desktop
+    /// or the panel, which never becomes the "active window".
+    pub fn in_active_window(&self) -> bool {
+        self.frame_w > 0
+            && self.frame_h > 0
+            && self.x >= self.frame_x
+            && self.x < self.frame_x + self.frame_w
+            && self.y >= self.frame_y
+            && self.y < self.frame_y + self.frame_h
+    }
 }
 
 /// D-Bus sink that the KWin script calls into.
@@ -33,18 +51,18 @@ struct Sink {
 
 #[interface(name = "org.stepshot.Sink")]
 impl Sink {
-    /// Called by the KWin script: "x,y,fx,fy,fw,fh,screen" (six ints + the
-    /// output name under the cursor; the trailing name may be empty).
+    /// Called by the KWin script: "x,y,fx,fy,fw,fh,popup,screen" (seven ints +
+    /// the output name under the cursor; the trailing name may be empty).
     fn report(&self, data: String) {
         let parts: Vec<&str> = data.split(',').collect();
-        if parts.len() < 6 {
+        if parts.len() < 7 {
             return;
         }
-        let v: Vec<i32> = parts[..6]
+        let v: Vec<i32> = parts[..7]
             .iter()
             .filter_map(|s| s.trim().parse().ok())
             .collect();
-        if v.len() == 6 {
+        if v.len() == 7 {
             let _ = self.tx.send(CursorInfo {
                 x: v[0],
                 y: v[1],
@@ -52,8 +70,9 @@ impl Sink {
                 frame_y: v[3],
                 frame_w: v[4],
                 frame_h: v[5],
+                in_popup: v[6] != 0,
                 screen: parts
-                    .get(6)
+                    .get(7)
                     .map(|s| s.trim().to_string())
                     .unwrap_or_default(),
             });
@@ -69,13 +88,25 @@ pub struct KwinCursor {
     counter: AtomicI32,
 }
 
-// Report `workspace.cursorPos` + active-window frame + the output name under
-// the cursor to our sink. The screen name lets us capture the right monitor
-// (e.g. the panel you clicked) when the active window itself has no content.
+// Report `workspace.cursorPos` + active-window frame + whether the cursor is
+// over a popup surface + the output name under the cursor to our sink. The
+// popup flag and the frame rect let the capture step decide when a window
+// capture would miss what was clicked (context menu, panel, desktop); the
+// screen name then selects the right monitor for the full-screen capture.
 const KWIN_SCRIPT: &str = r#"(function(){
   var p = workspace.cursorPos;
   var w = workspace.activeWindow;
   var g = w ? w.frameGeometry : null;
+  var inPopup = 0;
+  var wins = workspace.windowList ? workspace.windowList() : [];
+  for (var i = 0; i < wins.length; i++) {
+    var win = wins[i];
+    if (!win.popupWindow || win.tooltip || win.minimized) continue;
+    var pg = win.frameGeometry;
+    if (pg && p.x >= pg.x && p.x < pg.x + pg.width && p.y >= pg.y && p.y < pg.y + pg.height) {
+      inPopup = 1; break;
+    }
+  }
   var sname = "";
   var scr = workspace.screens || [];
   for (var i = 0; i < scr.length; i++) {
@@ -84,7 +115,7 @@ const KWIN_SCRIPT: &str = r#"(function(){
       sname = scr[i].name; break;
     }
   }
-  var a = [p.x, p.y, g?g.x:0, g?g.y:0, g?g.width:0, g?g.height:0].map(function(n){return Math.round(n);});
+  var a = [p.x, p.y, g?g.x:0, g?g.y:0, g?g.width:0, g?g.height:0, inPopup].map(function(n){return Math.round(n);});
   callDBus("org.stepshot.Sink", "/sink", "org.stepshot.Sink", "Report", a.join(",") + "," + sname);
 })();"#;
 
@@ -100,8 +131,7 @@ impl KwinCursor {
             .build()
             .context("could not start cursor sink")?;
 
-        let script_path =
-            std::env::temp_dir().join(format!("stepshot-cursor-{}.js", std::process::id()));
+        let script_path = script_dir().join(format!("stepshot-cursor-{}.js", std::process::id()));
         std::fs::write(&script_path, KWIN_SCRIPT).context("could not write KWin script")?;
 
         Ok(Self {
@@ -170,6 +200,16 @@ impl KwinCursor {
 
         info
     }
+}
+
+/// Where the KWin script file goes: `XDG_RUNTIME_DIR` (user-owned, mode 0700)
+/// so no other local user can pre-create the predictably named path; `/tmp`
+/// only as a fallback when the runtime dir is unavailable.
+fn script_dir() -> PathBuf {
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|p| p.is_dir())
+        .unwrap_or_else(std::env::temp_dir)
 }
 
 impl Drop for KwinCursor {
