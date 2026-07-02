@@ -19,7 +19,11 @@ pub fn write(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
     let t = crate::i18n::tr();
     let mut rtf = String::from("{\\rtf1\\ansi\\ansicpg1252\\deff0{\\fonttbl{\\f0 Segoe UI;}}\n");
 
-    let _ = writeln!(rtf, "\\fs40\\b stepshot\\b0  {}\\par", esc(t.report_heading));
+    let _ = writeln!(
+        rtf,
+        "\\fs40\\b stepshot\\b0  {}\\par",
+        esc(t.report_heading)
+    );
     let _ = writeln!(
         rtf,
         "\\fs20 {}\\line {}\\par",
