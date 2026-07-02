@@ -75,6 +75,7 @@ pub fn run_test_modes(
             cursor,
             atspi,
             &config.marker,
+            None,
         )?;
         println!("Oneshot → {}", step.describe());
         // Route through a real Session so this also writes session.json — the

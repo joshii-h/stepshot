@@ -108,7 +108,15 @@ fn pointer_devices() -> Vec<(String, evdev::Device)> {
 
 /// Blocking read loop for a single device. Returns when the device goes away
 /// (unplug) or the receiver is gone; the supervisor re-adopts on re-plug.
+///
+/// A step is emitted on button **release**, carrying the pointer movement
+/// accumulated (from `EV_REL` deltas) while the button was held — so the main
+/// loop can tell a drag from a plain click. Absolute pointers (touchpads) emit
+/// no `EV_REL`, so their drags simply read as clicks (delta stays zero).
 fn device_loop(path: &str, mut device: evdev::Device, tx: Sender<Click>) {
+    // The button currently held and the motion accumulated since its press.
+    let mut held: Option<Button> = None;
+    let mut drag = (0i32, 0i32);
     loop {
         let events = match device.fetch_events() {
             Ok(ev) => ev,
@@ -118,15 +126,42 @@ fn device_loop(path: &str, mut device: evdev::Device, tx: Sender<Click>) {
             }
         };
         for ev in events {
-            // Only button press (value == 1), not release/repeat.
-            if ev.event_type() == evdev::EventType::KEY
-                && ev.value() == 1
-                && let Some(button) = Button::from_evdev_code(ev.code())
-            {
-                // Receiver gone = recording finished; exit cleanly.
-                if tx.send(Click { button }).is_err() {
-                    return;
+            match ev.event_type() {
+                evdev::EventType::KEY => {
+                    let Some(button) = Button::from_evdev_code(ev.code()) else {
+                        continue;
+                    };
+                    match ev.value() {
+                        1 => {
+                            // Press: start tracking movement for this button.
+                            held = Some(button);
+                            drag = (0, 0);
+                        }
+                        0 => {
+                            // Release: emit the step with the accrued movement.
+                            let drag = if held == Some(button) {
+                                std::mem::take(&mut drag)
+                            } else {
+                                (0, 0)
+                            };
+                            held = None;
+                            // Receiver gone = recording finished; exit cleanly.
+                            if tx.send(Click { button, drag }).is_err() {
+                                return;
+                            }
+                        }
+                        _ => {} // repeat (2) — mice don't repeat buttons
+                    }
                 }
+                evdev::EventType::RELATIVE if held.is_some() => {
+                    // REL_X = 0, REL_Y = 1.
+                    match ev.code() {
+                        0 => drag.0 += ev.value(),
+                        1 => drag.1 += ev.value(),
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
     }

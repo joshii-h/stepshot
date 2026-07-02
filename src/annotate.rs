@@ -54,6 +54,56 @@ pub fn draw_click_marker(img: &mut RgbaImage, cx: i32, cy: i32, style: &MarkerSt
     );
 }
 
+/// Draws a drag-and-drop arrow from `start` to `end` in the marker's rim color,
+/// so a drag step shows where it went. Off-canvas parts are clipped by the
+/// per-pixel blend; a zero-length drag draws nothing.
+pub fn draw_drag_arrow(
+    img: &mut RgbaImage,
+    start: (i32, i32),
+    end: (i32, i32),
+    style: &MarkerStyle,
+) {
+    let (x0, y0) = (start.0 as f32, start.1 as f32);
+    let (x1, y1) = (end.0 as f32, end.1 as f32);
+    let (dx, dy) = (x1 - x0, y1 - y0);
+    let len = (dx * dx + dy * dy).sqrt();
+    if len < 2.0 {
+        return;
+    }
+    let thick = (style.radius * 0.16).clamp(2.0, 5.0);
+    stamp_line(img, (x0, y0), (x1, y1), thick, style.rim, style.rim_alpha);
+
+    // Two arrowhead barbs, angled back from the tip.
+    let (ux, uy) = (dx / len, dy / len);
+    let head = (len * 0.25).clamp(8.0, 22.0);
+    let (ca, sa) = (0.5f32.cos(), 0.5f32.sin()); // ~28.6°
+    for s in [1.0f32, -1.0] {
+        let rx = -ux * ca + uy * (s * sa);
+        let ry = -ux * (s * sa) - uy * ca;
+        let barb = (x1 + rx * head, y1 + ry * head);
+        stamp_line(img, (x1, y1), barb, thick, style.rim, style.rim_alpha);
+    }
+}
+
+/// Stamps a thick line by walking discs from `a` to `b`.
+fn stamp_line(
+    img: &mut RgbaImage,
+    a: (f32, f32),
+    b: (f32, f32),
+    thick: f32,
+    color: [u8; 3],
+    alpha: f32,
+) {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let steps = (dx * dx + dy * dy).sqrt().ceil().max(1.0) as i32;
+    for i in 0..=steps {
+        let t = i as f32 / steps as f32;
+        let px = (a.0 + dx * t).round() as i32;
+        let py = (a.1 + dy * t).round() as i32;
+        fill_circle(img, px, py, thick, color, alpha);
+    }
+}
+
 /// Translucent filled circle.
 fn fill_circle(img: &mut RgbaImage, cx: i32, cy: i32, r: f32, color: [u8; 3], alpha: f32) {
     let r2 = r * r;
@@ -155,6 +205,21 @@ mod tests {
         let mut img = RgbaImage::from_pixel(40, 40, Rgba([255, 255, 255, 255]));
         draw_click_marker(&mut img, 20, 20, &style);
         assert_eq!(img.get_pixel(20, 20).0[..3], [10, 20, 30]);
+    }
+
+    #[test]
+    fn drag_arrow_marks_the_path_and_is_clipped_safely() {
+        let style = MarkerStyle::default();
+        let mut img = RgbaImage::from_pixel(100, 100, Rgba([255, 255, 255, 255]));
+        draw_drag_arrow(&mut img, (10, 50), (90, 50), &style);
+        // A point along the shaft changed color.
+        assert_ne!(img.get_pixel(50, 50).0, [255, 255, 255, 255]);
+        // Zero-length drag is a no-op; off-canvas endpoints don't panic.
+        let mut img2 = RgbaImage::from_pixel(20, 20, Rgba([0, 0, 0, 255]));
+        let before = img2.clone();
+        draw_drag_arrow(&mut img2, (5, 5), (5, 5), &style);
+        assert_eq!(img2, before);
+        draw_drag_arrow(&mut img2, (-50, -50), (60, 60), &style); // must not panic
     }
 
     #[test]

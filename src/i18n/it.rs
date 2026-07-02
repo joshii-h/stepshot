@@ -8,6 +8,7 @@ pub static STRINGS: Strings = Strings {
     click_right: "Clic destro",
     click_middle: "Clic centrale",
     click_double: "Doppio clic",
+    click_drag: "Trascina e rilascia",
     action_on: "{action} su {element}",
     in_window: "{action} nella finestra “{title}”",
     in_active_window: "{action} nella finestra attiva",

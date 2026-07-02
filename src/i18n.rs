@@ -68,6 +68,7 @@ pub struct Strings {
     pub click_right: &'static str,
     pub click_middle: &'static str,
     pub click_double: &'static str, // action verb for a merged double-click
+    pub click_drag: &'static str,   // action verb for a drag-and-drop
 
     // Step description.
     pub action_on: &'static str,        // "{action} on {element}"

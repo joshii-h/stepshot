@@ -34,6 +34,9 @@ pub struct CaptureConfig {
     /// Two clicks of the same button within this many milliseconds merge into a
     /// single “double click” step. `0` disables merging.
     pub double_click_ms: u64,
+    /// A press that moves at least this many pixels before release is recorded
+    /// as a drag-and-drop step rather than a click. `0` disables drag detection.
+    pub drag_min_px: u32,
 }
 
 impl Default for CaptureConfig {
@@ -41,6 +44,7 @@ impl Default for CaptureConfig {
         Self {
             buttons: vec![Button::Left, Button::Right, Button::Middle],
             double_click_ms: 400,
+            drag_min_px: 16,
         }
     }
 }
@@ -145,6 +149,9 @@ impl Config {
         if let Some(ms) = toml.u64("capture", "double_click_ms") {
             cfg.capture.double_click_ms = ms;
         }
+        if let Some(px) = toml.u64("capture", "drag_min_px") {
+            cfg.capture.drag_min_px = px as u32;
+        }
         if let Some(list) = toml.string_array("capture", "buttons") {
             let buttons: Vec<Button> = list.iter().filter_map(|s| parse_button(s)).collect();
             if !buttons.is_empty() {
@@ -207,6 +214,9 @@ const EXAMPLE_TOML: &str = "\
 # Two clicks of the same button within this many milliseconds merge into one
 # \"double click\" step. Set to 0 to disable merging. Default: 400.
 # double_click_ms = 400
+# A press that moves at least this many pixels before release becomes a
+# drag-and-drop step instead of a click. Set to 0 to disable. Default: 16.
+# drag_min_px = 16
 ";
 
 // ─────────────────────────── minimal TOML subset ───────────────────────────
@@ -381,6 +391,7 @@ mod tests {
     fn capture_defaults_and_parsing() {
         let d = Config::from_toml_str("");
         assert_eq!(d.capture.double_click_ms, 400);
+        assert_eq!(d.capture.drag_min_px, 16);
         assert_eq!(d.capture.buttons.len(), 3);
         assert!(d.capture.records(Button::Middle));
 
@@ -389,9 +400,11 @@ mod tests {
             [capture]
             buttons = ["left", "nope", "right"]
             double_click_ms = 250
+            drag_min_px = 32
             "#,
         );
         assert_eq!(c.capture.double_click_ms, 250);
+        assert_eq!(c.capture.drag_min_px, 32);
         assert_eq!(c.capture.buttons, vec![Button::Left, Button::Right]);
         assert!(c.capture.records(Button::Left));
         assert!(!c.capture.records(Button::Middle)); // filtered out

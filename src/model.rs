@@ -42,6 +42,9 @@ impl fmt::Display for Button {
 #[derive(Debug, Clone, Copy)]
 pub struct Click {
     pub button: Button,
+    /// Pointer movement (evdev relative units) accumulated while the button was
+    /// held down — used to tell a drag from a plain click.
+    pub drag: (i32, i32),
 }
 
 /// A fully captured step: click + screenshot + context.
@@ -76,14 +79,20 @@ pub struct Step {
     /// Two rapid clicks of the same button merged into a single double-click
     /// step (see `capture.double_click_ms`).
     pub double: bool,
+    /// The button was pressed, dragged, and released elsewhere (see
+    /// `capture.drag_min_px`) — a drag-and-drop step.
+    pub drag: bool,
 }
 
 impl Step {
     /// The action verb for this step: the per-button label, or the double-click
     /// label when two rapid clicks were merged.
     fn action_label(&self) -> &'static str {
-        if self.double {
-            crate::i18n::tr().click_double
+        let t = crate::i18n::tr();
+        if self.drag {
+            t.click_drag
+        } else if self.double {
+            t.click_double
         } else {
             self.button.label()
         }
@@ -147,6 +156,7 @@ mod tests {
             description_override: None,
             is_screen: false,
             double: false,
+            drag: false,
         }
     }
 
@@ -192,6 +202,16 @@ mod tests {
         // An empty override falls back to auto.
         s.description_override = Some(String::new());
         assert_eq!(s.describe(), s.auto_describe());
+    }
+
+    #[test]
+    fn describe_drag() {
+        let mut s = step(Some("Files"), Some("list item “report.pdf”"));
+        s.drag = true;
+        assert_eq!(
+            s.describe(),
+            "Drag and drop on list item “report.pdf” in window “Files”"
+        );
     }
 
     #[test]

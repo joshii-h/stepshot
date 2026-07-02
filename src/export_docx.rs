@@ -94,6 +94,7 @@ mod tests {
             description_override: None,
             is_screen: false,
             double: false,
+            drag: false,
         }];
         write(&dir, &steps, "2026-01-01 12:00:00").unwrap();
         let f = dir.join("report.docx");

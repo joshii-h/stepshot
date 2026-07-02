@@ -66,6 +66,7 @@ fn step_json(step: &Step) -> Json {
         ("index", step.index.into()),
         ("button", button.into()),
         ("double", step.double.into()),
+        ("drag", step.drag.into()),
         ("time", step.time.as_str().into()),
         ("image", step.image_file.as_str().into()),
         ("is_screen", step.is_screen.into()),
@@ -166,6 +167,7 @@ fn step_from_json(j: &Json) -> Result<Step> {
         description_override: opt_str("description_override"),
         is_screen: j.get("is_screen").and_then(Json::as_bool).unwrap_or(false),
         double: j.get("double").and_then(Json::as_bool).unwrap_or(false),
+        drag: j.get("drag").and_then(Json::as_bool).unwrap_or(false),
     })
 }
 
@@ -208,6 +210,7 @@ fn map_element_box(
 
 /// Captures one step: get cursor → photograph window/screen → resolve element
 /// → draw marker → save.
+#[allow(clippy::too_many_arguments)]
 pub fn capture_step(
     index: usize,
     button: Button,
@@ -216,6 +219,7 @@ pub fn capture_step(
     cursor: &Option<KwinCursor>,
     atspi: &Option<Atspi>,
     marker: &MarkerStyle,
+    drag: Option<(i32, i32)>,
 ) -> Result<Step> {
     let ci = cursor.as_ref().and_then(|c| c.fetch());
 
@@ -263,6 +267,13 @@ pub fn capture_step(
         let off_y = (img_h as f64 - c.frame_h as f64 * s) / 2.0;
         let mx = ((c.x - c.frame_x) as f64 * s + off_x).round() as i32;
         let my = ((c.y - c.frame_y) as f64 * s + off_y).round() as i32;
+        // For a drag, draw an arrow from the (approximate) press point to the
+        // release point before marking the drop location.
+        if let Some((ddx, ddy)) = drag {
+            let sx = mx - (ddx as f64 * s).round() as i32;
+            let sy = my - (ddy as f64 * s).round() as i32;
+            annotate::draw_drag_arrow(&mut cap.image, (sx, sy), (mx, my), marker);
+        }
         annotate::draw_click_marker(&mut cap.image, mx, my, marker);
         // Map the AT-SPI element box (screen coords) into image pixels, using
         // the very same offset/scale, so the editor can redact it precisely.
@@ -294,6 +305,7 @@ pub fn capture_step(
         description_override: None,
         is_screen: cap.is_screen,
         double: false,
+        drag: drag.is_some(),
     })
 }
 
@@ -384,6 +396,7 @@ mod tests {
             description_override: None,
             is_screen,
             double: false,
+            drag: false,
         }
     }
 

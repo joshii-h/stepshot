@@ -285,9 +285,12 @@ fn main() -> Result<()> {
                 if let Some(s) = session.as_mut() {
                     let now = Instant::now();
                     // Skip while paused or when this button isn't recorded.
+                    let drag = drag_delta(&click, &config);
                     if paused.load(Ordering::SeqCst) || !config.capture.records(click.button) {
                         // dropped — no step, last_click untouched
-                    } else if is_double_click(last_click, click.button, now, &config) {
+                    } else if drag.is_none()
+                        && is_double_click(last_click, click.button, now, &config)
+                    {
                         // Two rapid clicks of the same button → one double-click
                         // step. Upgrade the previous step instead of capturing a
                         // near-identical second screenshot.
@@ -307,6 +310,7 @@ fn main() -> Result<()> {
                             &cursor,
                             &atspi,
                             &config.marker,
+                            drag,
                         ) {
                             Ok(step) => {
                                 s.steps.push(step);
@@ -318,7 +322,12 @@ fn main() -> Result<()> {
                                     &config.export,
                                 );
                                 write_session_json(s);
-                                last_click = Some((click.button, now));
+                                // A drag isn't a candidate for double-click merge.
+                                last_click = if drag.is_some() {
+                                    None
+                                } else {
+                                    Some((click.button, now))
+                                };
                             }
                             Err(e) => eprintln!("[stepshot] step {index}: {e:#}"),
                         }
@@ -333,6 +342,17 @@ fn main() -> Result<()> {
     let _ = handle.shutdown();
     eprintln!("stepshot stopped.");
     Ok(())
+}
+
+/// If the click's pointer movement crosses the configured drag threshold,
+/// return that delta (marking it a drag); otherwise `None` (a plain click).
+fn drag_delta(click: &model::Click, config: &Config) -> Option<(i32, i32)> {
+    let min = config.capture.drag_min_px as i32;
+    if min == 0 {
+        return None;
+    }
+    let (dx, dy) = click.drag;
+    (dx.abs() >= min || dy.abs() >= min).then_some((dx, dy))
 }
 
 /// Whether `button` clicked at `now` completes a double-click with the last

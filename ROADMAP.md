@@ -156,7 +156,9 @@ session" opens the report as the native entry point. Each session also gains a
 - [x] Pause/resume from the tray menu (keeps the session; drops clicks while
       paused).
 - [x] Click filtering: `[capture] buttons` selects which mouse buttons record.
-- [ ] Drag & drop as a step type (press → release at different points).
+- [x] Drag & drop as a step type: a press that moves ≥ `[capture] drag_min_px`
+      (default 16) before release is recorded as a “Drag and drop” step with an
+      arrow from start to drop. (Mouse/`EV_REL`; touchpad drags read as clicks.)
 - [x] Process name (`resourceClass`, in addition to the window title) in the
       step metadata and reports.
 
