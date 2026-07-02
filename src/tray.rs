@@ -20,6 +20,8 @@ pub enum Cmd {
     /// Toggle pause while recording (stop capturing clicks, keep the session).
     TogglePause,
     OpenFolder,
+    /// Open the in-browser editor for the last recorded session.
+    EditLast,
     /// Quit initiated from the tray menu — the clicks of that gesture are
     /// trimmed from the recording.
     Quit,
@@ -140,6 +142,15 @@ impl Tray for StepshotTray {
                 icon_name: "folder-open".into(),
                 activate: Box::new(|t: &mut StepshotTray| {
                     let _ = t.tx.send(Cmd::OpenFolder);
+                }),
+                ..Default::default()
+            }
+            .into(),
+            StandardItem {
+                label: t.menu_edit_last.into(),
+                icon_name: "document-edit".into(),
+                activate: Box::new(|t: &mut StepshotTray| {
+                    let _ = t.tx.send(Cmd::EditLast);
                 }),
                 ..Default::default()
             }

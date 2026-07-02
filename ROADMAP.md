@@ -140,9 +140,13 @@ session" opens the report as the native entry point. Each session also gains a
   - [x] Edit step descriptions (override the display text; the auto-generated
         one stays in `session.json` for revert).
   - [x] Delete steps + reorder (renumber and rewrite the PNGs; gap-free output).
-- [ ] **In-report editor** (`report.html` gains the JS editor: draw redaction
-      boxes / one-click the element box, edit text, delete, reorder → download
-      `edits.json`) + a tray "Edit last session" entry point.
+- [x] **Native in-browser editor** — `stepshot edit <session-dir>` serves the
+      editor from a tiny loopback HTTP server (zero deps, hand-rolled over
+      `std::net`, `127.0.0.1` + one-time token). Draw redaction boxes or
+      one-click the element box, edit text, delete/reorder; **"Apply" POSTs the
+      edits straight back and rewrites the session in place** — no download, no
+      manual `apply` step. Reachable from the tray ("Edit last session") or the
+      CLI. (`stepshot apply` remains for scripting/CI.)
 - [ ] Insert manual steps (required text + optional image file copied in).
 
 ### 0.5 — Capture polish

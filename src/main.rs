@@ -11,6 +11,7 @@ mod apply;
 mod capture;
 mod config;
 mod cursor;
+mod edit;
 mod export_docx;
 mod export_pdf;
 mod i18n;
@@ -45,12 +46,15 @@ const USAGE: &str = "\
 stepshot — step recorder for KDE/Wayland (tray app)
 
 Usage: stepshot [OUTPUT_DIR]
+       stepshot edit <SESSION_DIR>
        stepshot apply <SESSION_DIR> [EDITS_JSON]
 
 Arguments:
   OUTPUT_DIR   base folder for sessions (default: ~/Pictures/stepshot)
 
 Commands:
+  edit         open the in-browser editor for a session (redact, edit text,
+               delete/reorder steps); changes apply directly, no download
   apply        rebuild a session's reports, applying an editor's edits.json
                (or, with no edits.json, just regenerate every enabled export)
 
@@ -83,6 +87,13 @@ fn main() -> Result<()> {
                 std::path::Path::new(&dir),
                 edits.as_deref().map(std::path::Path::new),
             );
+        }
+        Some("edit") => {
+            let Some(dir) = std::env::args().nth(2) else {
+                eprintln!("usage: stepshot edit <SESSION_DIR>");
+                std::process::exit(2);
+            };
+            return edit::run(std::path::Path::new(&dir));
         }
         Some(flag) if flag.starts_with('-') => {
             eprintln!("unknown option: {flag}\n\n{USAGE}");
@@ -229,6 +240,20 @@ fn main() -> Result<()> {
                 Cmd::OpenFolder => {
                     if let Some(d) = &last_dir {
                         let _ = std::process::Command::new("xdg-open").arg(d).spawn();
+                    }
+                }
+                Cmd::EditLast => {
+                    // Launch a separate `stepshot edit` process (the editor runs
+                    // its own server loop and must not block the tray).
+                    if let Some(d) = &last_dir {
+                        match std::env::current_exe() {
+                            Ok(exe) => {
+                                let _ = std::process::Command::new(exe).arg("edit").arg(d).spawn();
+                            }
+                            Err(e) => eprintln!("[stepshot] could not locate own binary: {e}"),
+                        }
+                    } else if let Some(c) = &notify_conn {
+                        notify::notify(c, "stepshot", i18n::tr().tt_ready, "stepshot");
                     }
                 }
                 Cmd::Quit | Cmd::Terminate => {

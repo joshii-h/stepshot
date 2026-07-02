@@ -163,24 +163,42 @@ fn box_from_json(j: &Json) -> Option<[u32; 4]> {
     (v.len() == 4).then(|| [v[0], v[1], v[2], v[3]])
 }
 
-/// Apply `edits_path` (or the identity plan) to the session in `session_dir`,
-/// then rewrite `session.json` and regenerate every enabled export.
+/// CLI entry: apply `edits_path` (or, with `None`, just regenerate) and print
+/// a summary.
 pub fn run(session_dir: &Path, edits_path: Option<&Path>) -> Result<()> {
-    let config = Config::load();
-    let loaded = session::load_session(session_dir)?;
-    // Render the rebuilt report in the language the session was recorded in.
-    crate::i18n::init_lang(&loaded.language);
-    let sess = loaded.session;
-
-    let edits = match edits_path {
+    let n = match edits_path {
         Some(p) => {
             let text = std::fs::read_to_string(p)
                 .with_context(|| format!("could not read {}", p.display()))?;
-            Edits::parse(&text)?
+            apply_text(session_dir, &text)?
         }
-        None => Edits::identity(&sess),
+        None => apply_identity(session_dir)?,
     };
+    println!("Applied edits → {n} step(s) in {}", session_dir.display());
+    Ok(())
+}
 
+/// Apply an in-memory `edits.json` (as produced by the editor's POST) to the
+/// session, returning the resulting step count. Used by `stepshot edit`.
+pub fn apply_text(session_dir: &Path, edits_text: &str) -> Result<usize> {
+    let loaded = session::load_session(session_dir)?;
+    crate::i18n::init_lang(&loaded.language);
+    let edits = Edits::parse(edits_text)?;
+    apply_plan(session_dir, &loaded.session, &edits)
+}
+
+/// Regenerate the session's exports from `session.json` unchanged.
+fn apply_identity(session_dir: &Path) -> Result<usize> {
+    let loaded = session::load_session(session_dir)?;
+    crate::i18n::init_lang(&loaded.language);
+    let edits = Edits::identity(&loaded.session);
+    apply_plan(session_dir, &loaded.session, &edits)
+}
+
+/// The core: build the final steps + (redacted) images, swap them on disk,
+/// rewrite `session.json`, and regenerate every enabled export.
+fn apply_plan(session_dir: &Path, sess: &Session, edits: &Edits) -> Result<usize> {
+    let config = Config::load();
     let by_index: HashMap<usize, &Step> = sess.steps.iter().map(|s| (s.index, s)).collect();
 
     // Build the final steps and their (redacted) images entirely in memory
@@ -222,7 +240,7 @@ pub fn run(session_dir: &Path, edits_path: Option<&Path>) -> Result<()> {
 
     let rebuilt = Session {
         dir: session_dir.to_path_buf(),
-        started: sess.started,
+        started: sess.started.clone(),
         steps: final_steps,
     };
     session::write_session_json(&rebuilt);
@@ -234,12 +252,7 @@ pub fn run(session_dir: &Path, edits_path: Option<&Path>) -> Result<()> {
     )
     .context("could not rebuild reports")?;
 
-    println!(
-        "Applied edits → {} step(s) in {}",
-        rebuilt.steps.len(),
-        session_dir.display()
-    );
-    Ok(())
+    Ok(rebuilt.steps.len())
 }
 
 /// Delete every `step-*.png` in the folder (the new set is written afterwards).

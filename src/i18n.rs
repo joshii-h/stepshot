@@ -88,6 +88,7 @@ pub struct Strings {
     pub menu_pause: &'static str,
     pub menu_resume: &'static str,
     pub menu_open_folder: &'static str,
+    pub menu_edit_last: &'static str,
     pub menu_quit: &'static str,
 
     // Notifications.
@@ -104,6 +105,16 @@ pub struct Strings {
     pub report_step: &'static str,           // "Step {n}"
     pub report_steps_word: &'static str,     // "step(s)"
     pub report_self_contained: &'static str, // "self-contained"
+
+    // In-report editor (`stepshot edit`).
+    pub edit_banner: &'static str,
+    pub edit_hint: &'static str,
+    pub edit_redact_element: &'static str,
+    pub edit_delete: &'static str,
+    pub edit_apply: &'static str,
+    pub edit_done: &'static str,
+    pub edit_applied: &'static str, // "Applied {n} step(s) — reloading…"
+    pub edit_error: &'static str,
 }
 
 /// Maps a language to its string table (each defined in its own `i18n/*.rs`).

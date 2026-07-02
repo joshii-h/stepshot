@@ -80,6 +80,34 @@ STEPSHOT_ATDUMP=1  stepshot   # find the first named button and resolve it back
 
 `stepshot --help` / `--version` work as expected.
 
+## Editing & redaction
+
+After a recording you can fix it without re-recording — **blur out something
+sensitive**, reword a step, delete or reorder steps:
+
+```sh
+stepshot edit ~/Pictures/stepshot/session-<timestamp>
+```
+
+This opens a **native in-browser editor** (a tiny local server on `127.0.0.1`,
+no dependencies, no data leaves your machine). Drag across a screenshot to
+**redact** an area — or one-click **“Redact clicked element”** to blank the
+button/field that was clicked — edit the description text, delete or reorder
+steps, then **Apply**. The edits are written straight back to the session and
+every enabled export is regenerated; there is nothing to download. Redaction is
+**destructive** (the original pixels in `step-NNN.png` are gone).
+
+The tray menu’s **“Edit last session”** opens the same editor for your most
+recent recording. For scripting/CI there is also a headless form:
+
+```sh
+stepshot apply <session-dir> [edits.json]   # apply an editor's edits.json,
+                                            # or, with none, just regenerate
+```
+
+Each session stores a `session.json` (the source of truth) that both commands
+rebuild every format from.
+
 ## Configuration
 
 stepshot works with **no config file** — everything below is optional. To
@@ -172,6 +200,10 @@ src/
   model.rs    Step/Button + description logic
   report.rs   HTML + Markdown (honors the export selection)
   export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
+  session.rs  session.json (source of truth) + per-click capture step
+  apply.rs    stepshot apply — rebuild a session from session.json (+ edits.json)
+  edit.rs     stepshot edit — native in-browser editor (loopback HTTP server)
+  json.rs     minimal dependency-free JSON reader/writer (session.json/edits.json)
 ```
 
 The platform-specific parts sit behind traits — one backend per OS, while the
