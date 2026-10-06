@@ -84,6 +84,28 @@ pub struct Step {
     pub drag: bool,
 }
 
+/// The empty step, for struct-update syntax (`Step { index, ..Step::default() }`)
+/// — callers and tests set what they care about and stay unaffected when the
+/// struct grows a field.
+impl Default for Step {
+    fn default() -> Self {
+        Step {
+            index: 0,
+            button: Button::Left,
+            time: String::new(),
+            image_file: String::new(),
+            window_title: None,
+            process: None,
+            element: None,
+            element_box: None,
+            description_override: None,
+            is_screen: false,
+            double: false,
+            drag: false,
+        }
+    }
+}
+
 impl Step {
     /// The action verb for this step: the per-button label, or the double-click
     /// label when two rapid clicks were merged.
@@ -146,17 +168,11 @@ mod tests {
     fn step(window_title: Option<&str>, element: Option<&str>) -> Step {
         Step {
             index: 1,
-            button: Button::Left,
             time: "12:00:00".into(),
             image_file: "step-001.png".into(),
             window_title: window_title.map(String::from),
-            process: None,
             element: element.map(String::from),
-            element_box: None,
-            description_override: None,
-            is_screen: false,
-            double: false,
-            drag: false,
+            ..Step::default()
         }
     }
 

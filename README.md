@@ -198,16 +198,19 @@ src/
   annotate.rs draws the click marker into the image
   i18n.rs     minimal, dependency-free translations (one file per language)
   i18n/       en.rs, de.rs, fr.rs, es.rs, it.rs — string tables (one per language)
-  config.rs   ~/.config/stepshot/config.toml (marker, export selection, output dir)
+  config.rs   ~/.config/stepshot/config.toml (marker, export/capture options)
   model.rs    Step/Button + description logic
-  report.rs   HTML + Markdown (honors the export selection)
+  report.rs   HTML + Markdown + dispatch of the final exporters
   export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
   export_odt.rs / export_rtf.rs / export_txt.rs  ODT, RTF and plain-text exports
-  zip.rs      minimal dependency-free store-only ZIP writer (ODT container)
-  session.rs  session.json (source of truth) + per-click capture step
+  session.rs  live recording: per-click capture step, stop-gesture trim
+  store.rs    session.json (source of truth) — write incrementally, read back
   apply.rs    stepshot apply — rebuild a session from session.json (+ edits.json)
   edit.rs     stepshot edit — native in-browser editor (loopback HTTP server)
+  editor.css / editor.js          the editor page's stylesheet and client logic
   json.rs     minimal dependency-free JSON reader/writer (session.json/edits.json)
+  b64.rs      minimal dependency-free base64 encoder/decoder (embedded images)
+  zip.rs      minimal dependency-free store-only ZIP writer (ODT container)
 ```
 
 The platform-specific parts sit behind traits — one backend per OS, while the

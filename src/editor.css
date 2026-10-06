@@ -1,0 +1,23 @@
+  :root { color-scheme: light dark; }
+  body { font-family: system-ui, sans-serif; max-width: 980px; margin: 0 auto 6rem; padding: 0 1rem; line-height: 1.5; }
+  header { position: sticky; top: 0; background: Canvas; border-bottom: 2px solid #8884; padding: .75rem 0; z-index: 5; }
+  h1 { margin: 0; font-size: 1.4rem; }
+  .banner { margin: .3rem 0 0; font-weight: 600; }
+  .hint { margin: .1rem 0 0; color: #8888; font-size: .9rem; }
+  .step { margin: 1.5rem 0; padding-top: 1rem; border-top: 1px solid #8883; }
+  .step.deleted { opacity: .35; }
+  .step.deleted .shot { pointer-events: none; }
+  .bar { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
+  .num { flex: 0 0 auto; width: 1.8rem; height: 1.8rem; border-radius: 50%; background: #3b82f6; color: #fff; display: grid; place-items: center; font-weight: 700; }
+  button { font: inherit; padding: .3rem .7rem; border: 1px solid #8886; border-radius: 6px; background: #8881; cursor: pointer; }
+  button:hover { background: #8883; }
+  .mv { padding: .2rem .5rem; }
+  .desc { width: 100%; font: inherit; padding: .4rem .5rem; border: 1px solid #8886; border-radius: 6px; box-sizing: border-box; margin-bottom: .5rem; background: Field; color: FieldText; }
+  .shot { position: relative; display: inline-block; max-width: 100%; }
+  .shot img { max-width: 100%; height: auto; display: block; border: 1px solid #8884; border-radius: 8px; cursor: crosshair; }
+  .overlay { position: absolute; inset: 0; }
+  .rbox { position: absolute; background: rgba(20,20,20,.55); border: 1px solid #fff8; cursor: pointer; }
+  .rbox.temp { background: rgba(20,20,20,.3); pointer-events: none; }
+  footer { position: fixed; bottom: 0; left: 0; right: 0; background: Canvas; border-top: 2px solid #8884; padding: .6rem 1rem; display: flex; gap: .8rem; align-items: center; }
+  #apply { background: #3b82f6; color: #fff; border-color: #3b82f6; font-weight: 700; }
+  #status { color: #8888; }

@@ -8,6 +8,7 @@
 mod a11y;
 mod annotate;
 mod apply;
+mod b64;
 mod capture;
 mod config;
 mod cursor;
@@ -26,6 +27,7 @@ mod notify;
 mod report;
 mod selftest;
 mod session;
+mod store;
 mod tray;
 mod zip;
 
@@ -38,12 +40,13 @@ use cursor::KwinCursor;
 use input::{ClickSource, EvdevClickSource};
 use ksni::blocking::TrayMethods;
 use selftest::run_test_modes;
-use session::{Session, capture_step, finalize, output_base, write_session_json};
+use session::{Session, capture_step, finalize, output_base};
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
+use store::write_session_json;
 use tray::{Cmd, StepshotTray};
 
 const USAGE: &str = "\
@@ -78,7 +81,7 @@ fn main() -> Result<()> {
             return Ok(());
         }
         Some("--write-config") => {
-            return write_config();
+            return config::write_example();
         }
         Some("apply") => {
             let mut rest = std::env::args().skip(2);
@@ -289,11 +292,13 @@ fn main() -> Result<()> {
                 if let Some(s) = session.as_mut() {
                     let now = Instant::now();
                     // Skip while paused or when this button isn't recorded.
-                    let drag = drag_delta(&click, &config);
+                    let drag = config.capture.drag_delta(&click);
                     if paused.load(Ordering::SeqCst) || !config.capture.records(click.button) {
                         // dropped — no step, last_click untouched
                     } else if drag.is_none()
-                        && is_double_click(last_click, click.button, now, &config)
+                        && config
+                            .capture
+                            .is_double_click(last_click, click.button, now)
                     {
                         // Two rapid clicks of the same button → one double-click
                         // step. Upgrade the previous step instead of capturing a
@@ -348,35 +353,6 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-/// If the click's pointer movement crosses the configured drag threshold,
-/// return that delta (marking it a drag); otherwise `None` (a plain click).
-fn drag_delta(click: &model::Click, config: &Config) -> Option<(i32, i32)> {
-    let min = config.capture.drag_min_px as i32;
-    if min == 0 {
-        return None;
-    }
-    let (dx, dy) = click.drag;
-    (dx.abs() >= min || dy.abs() >= min).then_some((dx, dy))
-}
-
-/// Whether `button` clicked at `now` completes a double-click with the last
-/// recorded click — same button, within the configured window (0 disables it).
-fn is_double_click(
-    last: Option<(model::Button, Instant)>,
-    button: model::Button,
-    now: Instant,
-    config: &Config,
-) -> bool {
-    let window = config.capture.double_click_ms;
-    if window == 0 {
-        return false;
-    }
-    match last {
-        Some((b, t)) => b == button && now.duration_since(t).as_millis() as u64 <= window,
-        None => false,
-    }
-}
-
 /// Drain all queued clicks, returning how many were discarded.
 fn drain_clicks(rx: &mpsc::Receiver<model::Click>) -> usize {
     let mut n = 0;
@@ -384,20 +360,4 @@ fn drain_clicks(rx: &mpsc::Receiver<model::Click>) -> usize {
         n += 1;
     }
     n
-}
-
-/// `--write-config`: write the commented example config to the standard path
-/// (never overwriting an existing one) and print where it went.
-fn write_config() -> Result<()> {
-    let path = config::config_path().context("could not determine the config path")?;
-    if path.exists() {
-        eprintln!("config already exists: {}", path.display());
-        return Ok(());
-    }
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).context("could not create the config folder")?;
-    }
-    std::fs::write(&path, Config::example_toml()).context("could not write the config file")?;
-    println!("wrote example config: {}", path.display());
-    Ok(())
 }

@@ -34,22 +34,15 @@ pub fn write(dir: &Path, steps: &[Step], started: &str) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Button;
 
     fn step(index: usize, image: &str, desc_override: &str) -> Step {
         Step {
             index,
-            button: Button::Left,
             time: "12:00:00".into(),
             image_file: image.into(),
             window_title: Some("Win".into()),
-            process: None,
-            element: None,
-            element_box: None,
             description_override: (!desc_override.is_empty()).then(|| desc_override.to_string()),
-            is_screen: false,
-            double: false,
-            drag: false,
+            ..Step::default()
         }
     }
 

@@ -6,9 +6,15 @@
 # also not yet reachable from our side: printpdf 0.9.1 pins lopdf 0.39 and
 # docx-rs 0.4.20 pins quick-xml 0.36 — both are the latest upstream releases.
 # Revisit these entries whenever printpdf or docx-rs gets bumped.
+#
+# The "unmaintained" warnings below come in transitively via printpdf 0.9.1
+# (lopdf -> ttf-parser, allsorts -> ouroboros -> proc-macro-error) and carry no
+# known vulnerability. They clear once printpdf moves off those crates.
 [advisories]
 ignore = [
     "RUSTSEC-2026-0187", # lopdf: stack overflow parsing crafted PDFs (we only write PDFs)
     "RUSTSEC-2026-0194", # quick-xml: quadratic duplicate-attribute check when parsing (we only write XML)
     "RUSTSEC-2026-0195", # quick-xml: NsReader namespace allocation when parsing (we only write XML)
+    "RUSTSEC-2026-0192", # ttf-parser unmaintained (via printpdf -> lopdf)
+    "RUSTSEC-2024-0370", # proc-macro-error unmaintained (via printpdf -> allsorts -> ouroboros)
 ]
