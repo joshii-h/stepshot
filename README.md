@@ -29,6 +29,11 @@ It lives in the system tray; you start and stop recording from there.
 - **Own clicks stay out**: the clicks that operate stepshot's tray menu
   (start/stop/quit) are not recorded as steps.
 - **Element detection** via AT-SPI: “Left click on button ‘Save’ in window …”.
+- **Smart steps**: double clicks merge into one step, drag & drop becomes a
+  single step with an arrow, and each step names the app (process) as well as
+  the window. **Pause/resume** from the tray; pick which mouse buttons record.
+- **Editing & redaction** after the fact in a local in-browser editor — blur
+  sensitive areas, reword, delete, reorder or add steps (see below).
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
   and a **self-contained** `report.html` (images embedded as base64) plus `report.md`.
 - **Exports**: on stop you also get `report.pdf` (paginated), `report.docx` (Word),
@@ -215,7 +220,7 @@ src/
 
 The platform-specific parts sit behind traits — one backend per OS, while the
 rest (`model`, `report`, `annotate`) stays shared. A Windows backend
-(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is the planned next step.
+(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is drafted but parked (see Roadmap).
 
 ## Languages
 
@@ -238,19 +243,17 @@ Adding a language is deliberately simple and compiler-checked:
 ## Roadmap
 
 See [ROADMAP.md](ROADMAP.md) for the full vision, requirements and milestones,
-or the [project board](https://github.com/joshii-h/stepshot/projects). PDF + DOCX
-export (roadmap milestone 0.2) has already shipped; in short, next up:
+or the [project board](https://github.com/joshii-h/stepshot/projects).
+Milestones 0.1–0.7 (KDE foundation, PDF/DOCX/ODT/RTF/TXT exports, step editing
+& redaction, capture polish, configuration) have shipped. Still open:
 
-- **Windows backend** — mouse hook + `PrintWindow` + UI Automation (milestone 0.3);
-  implemented on the `feature/windows-backend` branch, kept in sync with main and
-  compiled in CI — what's left is runtime testing on a real Windows machine
-- **Step editing & redaction** (milestone 0.4) — fix a recording without
-  re-recording: blur sensitive regions, edit descriptions, delete steps
-- **Capture polish** (milestone 0.5) — double-click merge, pause/resume,
-  click filtering, drag & drop steps
-- **Configuration & export selection** (milestone 0.6) — config file with marker
-  style options; the user picks which export formats get written
-- **More export formats** (milestone 0.7) — ODT, RTF, plain text
+- **Testing on other desktops** — so far stepshot is developed and verified on
+  KDE Plasma / Wayland only; GNOME and the other major desktops come next,
+  before any distro packaging
+- **Windows backend** (milestone 0.3) — drafted on the `feature/windows-backend`
+  branch but never tested on Windows; parked until it can be, and behind the
+  current `main` (needs a port after the module refactor)
+- **GNOME backend**, **keyboard-step capture** (privacy-first, summarized only)
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)

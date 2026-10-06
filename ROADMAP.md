@@ -48,10 +48,10 @@ v0.1 items below are shipped in the alpha.
 | R9 | **Notifications** on start/stop (green ✓ / red ✗ style) | ✅ shipped |
 | R10 | **Embed images** in the report (inline, self-contained) | ✅ shipped |
 | R11 | Custom **SVG logo** (camera, red dot when active) — no emoji | ✅ shipped |
-| R12 | **i18n**, simple to extend (English + German) | ✅ shipped |
+| R12 | **i18n**, simple to extend (EN, DE, FR, ES, IT) | ✅ shipped |
 | R13 | Released as **alpha**, English UI, permissive (0BSD) | ✅ shipped |
 | R14 | **Export** to PDF and Word (like comparable tools) | ✅ shipped (0.2) |
-| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | 🚧 implemented on `feature/windows-backend` (in sync with `main`); live testing pending |
+| R15 | **Windows backend** (hook + PrintWindow + UI Automation) | ⏸️ drafted on `feature/windows-backend`, never tested on Windows; parked |
 
 ## Platform support matrix
 
@@ -65,8 +65,8 @@ v0.1 items below are shipped in the alpha.
 
 The platform-specific parts sit behind traits — `ClickSource` and
 `WindowCapturer` exist on `main` today; cursor tracking and element resolution
-are still KDE-typed and get their traits with the 0.3 platform split (already
-drafted as `platform.rs` on the `feature/windows-backend` branch). Each OS
+are still KDE-typed and get their traits with the 0.3 platform split (drafted as
+`platform.rs` on the parked `feature/windows-backend` branch). Each OS
 provides one backend, while the shared parts (`model`, `report`, `annotate`,
 `i18n`) stay platform-neutral.
 
@@ -101,10 +101,11 @@ element naming, self-contained HTML + Markdown report, notifications, i18n.
       `--version`, weekly `cargo audit` in CI, unit tests for the pure helpers.
 
 ### 0.3 — Windows backend
-Implemented on the [`feature/windows-backend`](https://github.com/joshii-h/stepshot/tree/feature/windows-backend)
-branch (`platform.rs` traits + `src/win/`, compiled by a Windows CI job) and
-kept in sync with `main` (full-screen capture, stop-gesture trim, hotplug).
-Before it lands: functional testing on a live Windows desktop.
+**Parked.** Drafted on the [`feature/windows-backend`](https://github.com/joshii-h/stepshot/tree/feature/windows-backend)
+branch (`platform.rs` traits + `src/win/`, compiled by a Windows CI job) but
+never run on a real Windows desktop. The branch predates the 0.7-era module
+refactor and needs a port onto current `main` before it can land; that waits
+until it can be tested on Windows.
 - [x] Low-level mouse hook (`SetWindowsHookEx` / `WH_MOUSE_LL`).
 - [x] Active-window screenshot (`PrintWindow` + `PW_RENDERFULLCONTENT`).
 - [x] Full-screen capture (`BitBlt` of the virtual screen) for panel/popup clicks.
@@ -180,6 +181,14 @@ the 0.6 export selection; the default is now **all** of them.
       (`zip.rs`), embedded screenshots, no dependency.
 - [x] RTF (Word/WordPad) — screenshots embedded as `\pngblip` hex.
 - [x] Plain text (.txt) — numbered steps, images referenced by filename.
+
+### Next — Desktop coverage
+Before any distro packaging (Fedora COPR, Gentoo ebuild, Flatpak, …), verify
+stepshot on the other major desktops, e.g. in VMs:
+- [ ] GNOME (Wayland) — see what fails without KWin (screenshots, cursor/window
+      geometry) and feed that into the GNOME backend below.
+- [ ] Other major desktops / compositors (e.g. Xfce, Cinnamon, wlroots-based).
+- [ ] Then: packaging for the distros that work.
 
 ### Later
 - macOS backend (CGEventTap / CGWindowList / AX API) — **help wanted**, see
