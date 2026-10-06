@@ -182,6 +182,17 @@ the 0.6 export selection; the default is now **all** of them.
 - [x] RTF (Word/WordPad) — screenshots embedded as `\pngblip` hex.
 - [x] Plain text (.txt) — numbered steps, images referenced by filename.
 
+### 0.8 — Keyboard steps
+Opt-in (`[capture] keyboard`, tray checkbox), privacy-first: *that* and *where*
+something was typed, never *what* ([#29](https://github.com/joshii-h/stepshot/issues/29)).
+- [x] Text entries summarized per focused field (AT-SPI), ended by a pause, a
+      click or Enter/Tab; screenshot of the result.
+- [x] Shortcuts and special keys as their own steps, labeled in the user's
+      keyboard layout (libxkbcommon; KDE `kxkbrc` + active layout over D-Bus).
+- [x] Password fields: a step without a screenshot.
+- [x] Typed characters never leave the input thread; nothing is reported while
+      not recording / paused / toggled off.
+
 ### Next — Desktop coverage
 Before any distro packaging (Fedora COPR, Gentoo ebuild, Flatpak, …), verify
 stepshot on the other major desktops, e.g. in VMs:
@@ -195,7 +206,6 @@ stepshot on the other major desktops, e.g. in VMs:
   [#1](https://github.com/joshii-h/stepshot/issues/1); I don't have a Mac running
   a current macOS to develop/test on, so this needs an external contributor.
 - GNOME backend (portal screenshot, AT-SPI already shared).
-- Keyboard-step capture (privacy-sensitive; needs a careful, summarized design).
 - More languages (the i18n layer is built for it; EN/DE/FR/ES/IT ship today).
 
 ## Non-goals

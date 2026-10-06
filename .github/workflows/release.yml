@@ -22,6 +22,9 @@ jobs:
         with:
           toolchain: stable
 
+      - name: Install system libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev
+
       - name: Cache cargo build
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
 

@@ -33,56 +33,83 @@ pub struct EvdevClickSource;
 
 impl ClickSource for EvdevClickSource {
     fn start(&self, tx: Sender<Click>) -> Result<()> {
-        let pointers = pointer_devices();
+        let found = watch_devices("evdev", is_pointer, move |path, device| {
+            device_loop(path, device, tx.clone())
+        })?;
         anyhow::ensure!(
-            !pointers.is_empty(),
+            found > 0,
             "no pointing device with mouse buttons found. Is the user in the `input` group?"
         );
-
-        // Paths that currently have a reader thread; a thread removes its own
-        // path when it exits, so the supervisor can re-adopt the device.
-        let active: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
-
-        for (path, device) in pointers {
-            spawn_device_thread(path, device, tx.clone(), active.clone())?;
-        }
-
-        // Supervisor: rescan for devices that appeared (or died) after startup.
-        thread::Builder::new()
-            .name("evdev-rescan".into())
-            .spawn(move || {
-                loop {
-                    thread::sleep(RESCAN_INTERVAL);
-                    for (path, device) in pointer_devices() {
-                        let known = active.lock().map(|a| a.contains(&path)).unwrap_or(true);
-                        if !known
-                            && spawn_device_thread(path, device, tx.clone(), active.clone())
-                                .is_err()
-                        {
-                            return; // thread spawning is broken; give up quietly
-                        }
-                    }
-                }
-            })
-            .context("could not start rescan thread")?;
         Ok(())
     }
 }
 
+/// Starts `run` on its own thread for every evdev device matching `filter`,
+/// plus a supervisor that adopts matching devices appearing (or re-appearing)
+/// later. Returns how many devices matched at startup; with none, nothing is
+/// spawned (the caller decides whether that's an error).
+pub(crate) fn watch_devices<R>(
+    label: &'static str,
+    filter: fn(&evdev::Device) -> bool,
+    run: R,
+) -> Result<usize>
+where
+    R: Fn(&str, evdev::Device) + Send + Sync + 'static,
+{
+    let devices = matching_devices(filter);
+    if devices.is_empty() {
+        return Ok(0);
+    }
+    let found = devices.len();
+    let run = Arc::new(run);
+
+    // Paths that currently have a reader thread; a thread removes its own
+    // path when it exits, so the supervisor can re-adopt the device.
+    let active: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+
+    for (path, device) in devices {
+        spawn_device_thread(label, path, device, run.clone(), active.clone())?;
+    }
+
+    // Supervisor: rescan for devices that appeared (or died) after startup.
+    thread::Builder::new()
+        .name(format!("{label}-rescan"))
+        .spawn(move || {
+            loop {
+                thread::sleep(RESCAN_INTERVAL);
+                for (path, device) in matching_devices(filter) {
+                    let known = active.lock().map(|a| a.contains(&path)).unwrap_or(true);
+                    if !known
+                        && spawn_device_thread(label, path, device, run.clone(), active.clone())
+                            .is_err()
+                    {
+                        return; // thread spawning is broken; give up quietly
+                    }
+                }
+            }
+        })
+        .context("could not start rescan thread")?;
+    Ok(found)
+}
+
 /// Registers `path` as active and starts its blocking read loop.
-fn spawn_device_thread(
+fn spawn_device_thread<R>(
+    label: &str,
     path: String,
     device: evdev::Device,
-    tx: Sender<Click>,
+    run: Arc<R>,
     active: Arc<Mutex<HashSet<String>>>,
-) -> Result<()> {
+) -> Result<()>
+where
+    R: Fn(&str, evdev::Device) + Send + Sync + 'static,
+{
     if let Ok(mut a) = active.lock() {
         a.insert(path.clone());
     }
     thread::Builder::new()
-        .name(format!("evdev:{}", path))
+        .name(format!("{label}:{path}"))
         .spawn(move || {
-            device_loop(&path, device, tx);
+            run(&path, device);
             if let Ok(mut a) = active.lock() {
                 a.remove(&path);
             }
@@ -91,19 +118,19 @@ fn spawn_device_thread(
     Ok(())
 }
 
-/// All evdev devices that support mouse buttons (i.e. mice/touchpads).
-fn pointer_devices() -> Vec<(String, evdev::Device)> {
-    let mut out = Vec::new();
-    for (path, device) in evdev::enumerate() {
-        let is_pointer = device
-            .supported_keys()
-            .map(|keys| keys.contains(evdev::KeyCode::BTN_LEFT))
-            .unwrap_or(false);
-        if is_pointer {
-            out.push((path.to_string_lossy().into_owned(), device));
-        }
-    }
-    out
+/// All evdev devices accepted by `filter`, with their paths.
+fn matching_devices(filter: fn(&evdev::Device) -> bool) -> Vec<(String, evdev::Device)> {
+    evdev::enumerate()
+        .filter(|(_, device)| filter(device))
+        .map(|(path, device)| (path.to_string_lossy().into_owned(), device))
+        .collect()
+}
+
+/// Devices that support mouse buttons (i.e. mice/touchpads).
+fn is_pointer(device: &evdev::Device) -> bool {
+    device
+        .supported_keys()
+        .is_some_and(|keys| keys.contains(evdev::KeyCode::BTN_LEFT))
 }
 
 /// Blocking read loop for a single device. Returns when the device goes away

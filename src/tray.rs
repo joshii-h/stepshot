@@ -6,7 +6,7 @@
 //! Stop/Quit the trailing gesture steps are trimmed (`trim_stop_gesture`).
 
 use crate::icon;
-use ksni::menu::StandardItem;
+use ksni::menu::{CheckmarkItem, StandardItem};
 use ksni::{MenuItem, Tray};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -19,6 +19,8 @@ pub enum Cmd {
     Stop,
     /// Toggle pause while recording (stop capturing clicks, keep the session).
     TogglePause,
+    /// Toggle keyboard-step capture (opt-in, see `keys`).
+    ToggleKeyboard,
     OpenFolder,
     /// Open the in-browser editor for the last recorded session.
     EditLast,
@@ -34,6 +36,7 @@ pub struct StepshotTray {
     pub recording: Arc<AtomicBool>,
     pub paused: Arc<AtomicBool>,
     pub steps: Arc<AtomicUsize>,
+    pub keyboard: Arc<AtomicBool>,
 }
 
 impl Tray for StepshotTray {
@@ -135,6 +138,18 @@ impl Tray for StepshotTray {
                 .into(),
             );
         }
+
+        items.push(
+            CheckmarkItem {
+                label: t.menu_keyboard.into(),
+                checked: self.keyboard.load(Ordering::SeqCst),
+                activate: Box::new(|t: &mut StepshotTray| {
+                    let _ = t.tx.send(Cmd::ToggleKeyboard);
+                }),
+                ..Default::default()
+            }
+            .into(),
+        );
 
         items.extend([
             StandardItem {

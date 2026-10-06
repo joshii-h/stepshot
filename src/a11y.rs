@@ -21,6 +21,15 @@ const NULL_PATH: &str = "/org/a11y/atspi/null";
 /// Maximum time for an element_at query before we give up.
 const QUERY_DEADLINE: Duration = Duration::from_millis(1500);
 
+/// AT-SPI state bits (`AtspiStateType`), as indices into `GetState`'s bitset.
+const STATE_ACTIVE: u32 = 1;
+const STATE_FOCUSED: u32 = 12;
+const STATE_SHOWING: u32 = 25;
+
+/// Upper bound on nodes visited while searching the focused element — a big
+/// browser page must not turn the search into a full-tree crawl.
+const FOCUS_SEARCH_BUDGET: usize = 3000;
+
 /// A detected UI element.
 #[derive(Debug, Clone)]
 pub struct Element {
@@ -120,6 +129,18 @@ impl Atspi {
         rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
     }
 
+    /// The element that has keyboard focus in the active window — with the same
+    /// hard deadline as [`Atspi::element_at`].
+    pub fn focused_element(&self) -> Option<Element> {
+        let bus = self.probe.bus.clone();
+        let (tx, rx) = mpsc::channel();
+        std::thread::spawn(move || {
+            let probe = Probe { bus };
+            let _ = tx.send(probe.focused_inner());
+        });
+        rx.recv_timeout(QUERY_DEADLINE).ok().flatten()
+    }
+
     /// Debug: print the tree (name + role) up to `max_depth`.
     pub fn debug_dump(&self, max_depth: u32) {
         let root = (REGISTRY.to_string(), ROOT_PATH.to_string());
@@ -162,6 +183,12 @@ impl Atspi {
     }
 }
 
+/// Whether `state` is set in an AT-SPI state bitset (32 states per word).
+fn has_state(bits: &[u32], state: u32) -> bool {
+    bits.get((state / 32) as usize)
+        .is_some_and(|w| w & (1 << (state % 32)) != 0)
+}
+
 /// Read-only traversal on an a11y bus connection (usable from the worker thread).
 struct Probe {
     bus: zbus::blocking::Connection,
@@ -184,6 +211,57 @@ impl Probe {
             }
         }
         None
+    }
+
+    /// Focused element: find the active frame, then search its showing subtree
+    /// for the node carrying the FOCUSED state (AT-SPI has no global
+    /// "who has focus" call, and FOCUSED is not propagated to ancestors).
+    fn focused_inner(&self) -> Option<Element> {
+        let apps = self.children(&(REGISTRY.to_string(), ROOT_PATH.to_string()));
+        let frame = apps
+            .iter()
+            .flat_map(|app| self.children(app))
+            .find(|f| has_state(&self.states(f), STATE_ACTIVE))?;
+        let mut budget = FOCUS_SEARCH_BUDGET;
+        let node = self.find_focused(&frame, 0, &mut budget)?;
+        let name = self.name(&node);
+        let role = self.role_name(&node);
+        let bounds = self.extents(&node).filter(|&(_, _, w, h)| w > 0 && h > 0);
+        Some(Element { name, role, bounds })
+    }
+
+    /// Depth-first search for the FOCUSED node, pruning subtrees that aren't
+    /// showing (hidden tabs, collapsed panels).
+    fn find_focused(&self, r: &Ref, depth: u32, budget: &mut usize) -> Option<Ref> {
+        if depth > 40 || *budget == 0 {
+            return None;
+        }
+        *budget -= 1;
+        let states = self.states(r);
+        if depth > 0 && has_state(&states, STATE_FOCUSED) {
+            return Some(r.clone());
+        }
+        if depth > 0 && !has_state(&states, STATE_SHOWING) {
+            return None;
+        }
+        self.children(r)
+            .iter()
+            .find_map(|ch| self.find_focused(ch, depth + 1, budget))
+    }
+
+    /// The node's state bitset (`Accessible.GetState`), empty on error.
+    fn states(&self, r: &Ref) -> Vec<u32> {
+        self.bus
+            .call_method(
+                Some(r.0.as_str()),
+                r.1.as_str(),
+                Some(IFACE_ACCESSIBLE),
+                "GetState",
+                &(),
+            )
+            .ok()
+            .and_then(|reply| reply.body().deserialize::<Vec<u32>>().ok())
+            .unwrap_or_default()
     }
 
     /// Descend from the frame to the deepest element at the point.

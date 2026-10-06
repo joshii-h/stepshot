@@ -47,6 +47,18 @@ pub struct Click {
     pub drag: (i32, i32),
 }
 
+/// A keyboard step's kind (see [`crate::keys`]). The typed text itself is
+/// never recorded — only that, and where, something was typed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyKind {
+    /// Text typed into a field (optionally closed by Enter/Tab, see `keys`).
+    Text,
+    /// Text typed into a password field — such steps never get a screenshot.
+    Password,
+    /// A single key or shortcut (`keys` holds its label, e.g. “Ctrl+S”).
+    Press,
+}
+
 /// A fully captured step: click + screenshot + context.
 #[derive(Debug, Clone)]
 pub struct Step {
@@ -82,6 +94,11 @@ pub struct Step {
     /// The button was pressed, dragged, and released elsewhere (see
     /// `capture.drag_min_px`) — a drag-and-drop step.
     pub drag: bool,
+    /// Set for keyboard steps (then `button` is meaningless).
+    pub key: Option<KeyKind>,
+    /// Key label: the shortcut of a [`KeyKind::Press`] step, or the Enter/Tab
+    /// that closed a text entry.
+    pub keys: Option<String>,
 }
 
 /// The empty step, for struct-update syntax (`Step { index, ..Step::default() }`)
@@ -102,6 +119,8 @@ impl Default for Step {
             is_screen: false,
             double: false,
             drag: false,
+            key: None,
+            keys: None,
         }
     }
 }
@@ -133,6 +152,9 @@ impl Step {
     /// override — the source text kept in `session.json` for revert.
     pub fn auto_describe(&self) -> String {
         let t = crate::i18n::tr();
+        if let Some(kind) = self.key {
+            return self.describe_key(kind);
+        }
         let verb = self.action_label();
         let action = match &self.element {
             Some(el) if !el.is_empty() => t
@@ -141,6 +163,36 @@ impl Step {
                 .replace("{element}", el),
             _ => verb.to_string(),
         };
+        self.in_where(action)
+    }
+
+    /// “Typed text in text “Search”, then pressed Enter in window …”.
+    fn describe_key(&self, kind: KeyKind) -> String {
+        let t = crate::i18n::tr();
+        let keys = self.keys.as_deref().unwrap_or_default();
+        let verb = match kind {
+            KeyKind::Text => t.key_typed.to_string(),
+            KeyKind::Password => t.key_password.to_string(),
+            KeyKind::Press => t.key_pressed.replace("{keys}", keys),
+        };
+        let mut action = match &self.element {
+            Some(el) if !el.is_empty() => {
+                t.key_in.replace("{action}", &verb).replace("{element}", el)
+            }
+            _ => verb,
+        };
+        if kind != KeyKind::Press && !keys.is_empty() {
+            action = t
+                .key_then
+                .replace("{action}", &action)
+                .replace("{keys}", keys);
+        }
+        self.in_where(action)
+    }
+
+    /// Append where the step happened: the window, or the screen fallback.
+    fn in_where(&self, action: String) -> String {
+        let t = crate::i18n::tr();
         match &self.window_title {
             Some(title) if !title.is_empty() => t
                 .in_window
@@ -228,6 +280,25 @@ mod tests {
             s.describe(),
             "Drag and drop on list item “report.pdf” in window “Files”"
         );
+    }
+
+    #[test]
+    fn describe_keyboard_steps() {
+        let mut s = step(Some("Login"), Some("text “User”"));
+        s.key = Some(KeyKind::Text);
+        assert_eq!(s.describe(), "Typed text in text “User” in window “Login”");
+        s.keys = Some("Tab".into());
+        assert_eq!(
+            s.describe(),
+            "Typed text in text “User”, then pressed Tab in window “Login”"
+        );
+        s.key = Some(KeyKind::Password);
+        s.keys = None;
+        s.element = None;
+        assert_eq!(s.describe(), "Entered a password in window “Login”");
+        s.key = Some(KeyKind::Press);
+        s.keys = Some("Ctrl+S".into());
+        assert_eq!(s.describe(), "Pressed Ctrl+S in window “Login”");
     }
 
     #[test]

@@ -2,12 +2,12 @@
 //! writing the final report. The tray event loop in `main` drives these; the
 //! on-disk `session.json` lives in [`crate::store`].
 
-use crate::a11y::Atspi;
+use crate::a11y::{Atspi, Element};
 use crate::annotate::{self, MarkerStyle};
 use crate::capture::{KdeCapturer, WindowCapturer};
 use crate::config::{Config, ExportConfig};
 use crate::cursor::KwinCursor;
-use crate::model::{Button, Step};
+use crate::model::{Button, KeyKind, Step};
 use crate::report;
 use anyhow::{Context, Result};
 use chrono::Local;
@@ -18,6 +18,28 @@ pub struct Session {
     pub dir: PathBuf,
     pub started: String,
     pub steps: Vec<Step>,
+}
+
+/// A text entry in progress: where it goes (captured when typing starts, while
+/// the field still has focus) and when the last key came.
+pub struct TextEntry {
+    pub element: Option<Element>,
+    pub password: bool,
+    pub last: std::time::Instant,
+}
+
+impl TextEntry {
+    pub fn begin(atspi: &Option<Atspi>) -> Self {
+        let element = atspi.as_ref().and_then(|a| a.focused_element());
+        let password = element
+            .as_ref()
+            .is_some_and(|e| e.role.to_lowercase().contains("password"));
+        Self {
+            element,
+            password,
+            last: std::time::Instant::now(),
+        }
+    }
 }
 
 /// Writes the session report (no-op for 0 steps), honoring the configured
@@ -126,10 +148,8 @@ pub fn capture_step(
     if let Some(c) = ci.as_ref()
         && !cap.is_screen
     {
-        let s = if cap.scale > 0.0 { cap.scale } else { 1.0 };
+        let (s, off_x, off_y) = frame_mapping(&cap, c);
         let (img_w, img_h) = (cap.image.width(), cap.image.height());
-        let off_x = (img_w as f64 - c.frame_w as f64 * s) / 2.0;
-        let off_y = (img_h as f64 - c.frame_h as f64 * s) / 2.0;
         let mx = ((c.x - c.frame_x) as f64 * s + off_x).round() as i32;
         let my = ((c.y - c.frame_y) as f64 * s + off_y).round() as i32;
         // For a drag, draw an arrow from the (approximate) press point to the
@@ -171,6 +191,81 @@ pub fn capture_step(
         is_screen: cap.is_screen,
         double: false,
         drag: drag.is_some(),
+        key: None,
+        keys: None,
+    })
+}
+
+/// Scale and centering offset that map screen coordinates (relative to the
+/// active window's frame) into the window capture's image pixels.
+fn frame_mapping(cap: &crate::capture::Capture, c: &crate::cursor::CursorInfo) -> (f64, f64, f64) {
+    let s = if cap.scale > 0.0 { cap.scale } else { 1.0 };
+    let off_x = (cap.image.width() as f64 - c.frame_w as f64 * s) / 2.0;
+    let off_y = (cap.image.height() as f64 - c.frame_h as f64 * s) / 2.0;
+    (s, off_x, off_y)
+}
+
+/// Captures one keyboard step: photograph the active window (where the keys
+/// went) without a click marker, and remember the focused element's box so the
+/// editor can redact the typed-into field in one click. Password entries are
+/// never photographed: the capture only supplies the window title/process and
+/// its pixels are dropped.
+#[allow(clippy::too_many_arguments)]
+pub fn capture_key_step(
+    index: usize,
+    kind: KeyKind,
+    keys: Option<String>,
+    element: Option<&Element>,
+    dir: &Path,
+    capturer: &KdeCapturer,
+    cursor: &Option<KwinCursor>,
+) -> Result<Step> {
+    let mut cap = capturer.capture_active_window().context("capture failed")?;
+    if crate::capture::is_blank(&cap.image) {
+        cap = capturer
+            .capture_active_screen()
+            .context("screen capture failed")?;
+        cap.is_screen = true;
+    }
+
+    let mut element_box = None;
+    if !cap.is_screen
+        && let Some((ex, ey, ew, eh)) = element.and_then(|e| e.bounds)
+        && let Some(c) = cursor.as_ref().and_then(|c| c.fetch())
+    {
+        let (s, off_x, off_y) = frame_mapping(&cap, &c);
+        element_box = map_element_box(
+            (ex, ey, ew, eh),
+            (c.frame_x, c.frame_y),
+            s,
+            (off_x, off_y),
+            (cap.image.width(), cap.image.height()),
+        );
+    }
+
+    let image_file = if kind == KeyKind::Password {
+        element_box = None;
+        String::new()
+    } else {
+        let name = format!("step-{index:03}.png");
+        cap.image
+            .save(dir.join(&name))
+            .with_context(|| format!("could not save image {name}"))?;
+        name
+    };
+
+    Ok(Step {
+        index,
+        time: Local::now().format("%H:%M:%S").to_string(),
+        image_file,
+        window_title: cap.window_title,
+        process: cap.process,
+        element: element.map(Element::describe),
+        element_box,
+        is_screen: cap.is_screen,
+        key: Some(kind),
+        keys,
+        ..Step::default()
     })
 }
 
@@ -202,7 +297,7 @@ pub fn trim_stop_gesture(steps: &mut Vec<Step>, pending: usize) -> Vec<Step> {
     for _ in 0..2usize.saturating_sub(pending) {
         if steps
             .last()
-            .is_some_and(|s| s.is_screen && s.window_title.is_none())
+            .is_some_and(|s| s.is_screen && s.window_title.is_none() && s.key.is_none())
         {
             removed.extend(steps.pop());
         } else {
@@ -297,6 +392,16 @@ mod tests {
         let mut steps = vec![step(true, None)];
         trim_stop_gesture(&mut steps, 2);
         assert_eq!(steps.len(), 1);
+    }
+
+    #[test]
+    fn keyboard_steps_are_never_trimmed() {
+        let mut typed = step(true, None);
+        typed.key = Some(KeyKind::Text);
+        let mut steps = vec![typed, step(true, None)];
+        trim_stop_gesture(&mut steps, 0);
+        assert_eq!(steps.len(), 1);
+        assert!(steps[0].key.is_some());
     }
 
     #[test]
