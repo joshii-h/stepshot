@@ -37,6 +37,11 @@ pub struct CaptureConfig {
     /// A press that moves at least this many pixels before release is recorded
     /// as a drag-and-drop step rather than a click. `0` disables drag detection.
     pub drag_min_px: u32,
+    /// Record keyboard steps (opt-in; also toggled from the tray). Only *that*
+    /// and *where* something was typed is recorded, never the text itself.
+    pub keyboard: bool,
+    /// A text entry counts as finished after this long without typing.
+    pub typing_idle_ms: u64,
 }
 
 impl Default for CaptureConfig {
@@ -45,6 +50,8 @@ impl Default for CaptureConfig {
             buttons: vec![Button::Left, Button::Right, Button::Middle],
             double_click_ms: 400,
             drag_min_px: 16,
+            keyboard: false,
+            typing_idle_ms: 1500,
         }
     }
 }
@@ -197,6 +204,14 @@ impl Config {
         if let Some(px) = toml.u64("capture", "drag_min_px") {
             cfg.capture.drag_min_px = px as u32;
         }
+        if let Some(on) = toml.bool("capture", "keyboard") {
+            cfg.capture.keyboard = on;
+        }
+        if let Some(ms) = toml.u64("capture", "typing_idle_ms")
+            && ms > 0
+        {
+            cfg.capture.typing_idle_ms = ms;
+        }
         if let Some(list) = toml.string_array("capture", "buttons") {
             let buttons: Vec<Button> = list.iter().filter_map(|s| parse_button(s)).collect();
             if !buttons.is_empty() {
@@ -279,6 +294,13 @@ const EXAMPLE_TOML: &str = "\
 # A press that moves at least this many pixels before release becomes a
 # drag-and-drop step instead of a click. Set to 0 to disable. Default: 16.
 # drag_min_px = 16
+# Record keyboard steps (off by default; also switchable from the tray menu).
+# Only *that* and *where* something was typed is recorded, never the text:
+# \"Typed text in text field 'Search'\", \"Pressed Ctrl+S\". Password fields get
+# a step without a screenshot.
+# keyboard = false
+# A text entry counts as finished after this many milliseconds without typing.
+# typing_idle_ms = 1500
 ";
 
 // ─────────────────────────── minimal TOML subset ───────────────────────────
@@ -328,6 +350,14 @@ impl Toml {
 
     fn u64(&self, section: &str, key: &str) -> Option<u64> {
         self.raw(section, key)?.trim().parse().ok()
+    }
+
+    fn bool(&self, section: &str, key: &str) -> Option<bool> {
+        match self.raw(section, key)?.trim() {
+            "true" => Some(true),
+            "false" => Some(false),
+            _ => None,
+        }
     }
 
     fn color(&self, section: &str, key: &str) -> Option<[u8; 3]> {
@@ -470,6 +500,11 @@ mod tests {
         assert_eq!(c.capture.double_click_ms, 250);
         assert_eq!(c.capture.drag_min_px, 32);
         assert_eq!(c.capture.buttons, vec![Button::Left, Button::Right]);
+        assert!(!c.capture.keyboard); // opt-in
+
+        let k = Config::from_toml_str("[capture]\nkeyboard = true\ntyping_idle_ms = 900\n");
+        assert!(k.capture.keyboard);
+        assert_eq!(k.capture.typing_idle_ms, 900);
         assert!(c.capture.records(Button::Left));
         assert!(!c.capture.records(Button::Middle)); // filtered out
 

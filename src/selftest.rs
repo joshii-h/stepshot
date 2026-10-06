@@ -60,6 +60,45 @@ pub fn run_test_modes(
         }
         return Ok(true);
     }
+    if std::env::var_os("STEPSHOT_FOCUS").is_some() {
+        // Print the focused element a few times — focus a field meanwhile.
+        if let Some(a) = atspi.as_mut() {
+            a.enable();
+            for _ in 0..5 {
+                std::thread::sleep(Duration::from_millis(1500));
+                let t = std::time::Instant::now();
+                let el = a.focused_element();
+                println!(
+                    "focused → {:?} ({} ms)",
+                    el.map(|e| e.describe()),
+                    t.elapsed().as_millis()
+                );
+            }
+            a.restore();
+        }
+        return Ok(true);
+    }
+    if std::env::var_os("STEPSHOT_KEYS").is_some() {
+        // Show how key presses are classified/labeled for 20 s. Typing shows
+        // up only as a content-free tick — exactly what the recorder sees.
+        let names = crate::keymap::LayoutNames::detect();
+        println!("layout: {names:?}");
+        let km = crate::keymap::Keymap::new(&names);
+        let gate = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let (tx, rx) = std::sync::mpsc::channel();
+        let n = crate::keys::start(tx, gate)?;
+        println!("{n} keyboard(s) — press some keys (20 s)…");
+        let end = std::time::Instant::now() + Duration::from_secs(20);
+        while let Some(left) = end.checked_duration_since(std::time::Instant::now()) {
+            if let Ok(ev) = rx.recv_timeout(left) {
+                match km.label_event(ev) {
+                    Some(label) => println!("key step: {label}"),
+                    None => println!("{ev:?}"),
+                }
+            }
+        }
+        return Ok(true);
+    }
     if std::env::var_os("STEPSHOT_ONESHOT").is_some() {
         let dir = output_base(config)?.join(format!("oneshot-{}", Local::now().format("%H-%M-%S")));
         std::fs::create_dir_all(&dir)?;

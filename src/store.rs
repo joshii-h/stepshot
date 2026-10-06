@@ -5,7 +5,7 @@
 //! edit`, which rebuild every export from it.
 
 use crate::json::Json;
-use crate::model::{Button, Step};
+use crate::model::{Button, KeyKind, Step};
 use crate::session::Session;
 use anyhow::{Context, Result};
 use std::path::Path;
@@ -36,9 +36,17 @@ fn step_json(step: &Step) -> Json {
         Some([x, y, w, h]) => Json::Arr(vec![x.into(), y.into(), w.into(), h.into()]),
         None => Json::Null,
     };
+    let key: Json = match step.key {
+        Some(KeyKind::Text) => "text".into(),
+        Some(KeyKind::Password) => "password".into(),
+        Some(KeyKind::Press) => "press".into(),
+        None => Json::Null,
+    };
     Json::obj(vec![
         ("index", step.index.into()),
         ("button", button.into()),
+        ("key", key),
+        ("keys", step.keys.clone().into()),
         ("double", step.double.into()),
         ("drag", step.drag.into()),
         ("time", step.time.as_str().into()),
@@ -135,6 +143,13 @@ fn step_from_json(j: &Json) -> Result<Step> {
         is_screen: flag("is_screen"),
         double: flag("double"),
         drag: flag("drag"),
+        key: match j.get("key").and_then(Json::as_str) {
+            Some("text") => Some(KeyKind::Text),
+            Some("password") => Some(KeyKind::Password),
+            Some("press") => Some(KeyKind::Press),
+            _ => None,
+        },
+        keys: opt_str("keys"),
     })
 }
 

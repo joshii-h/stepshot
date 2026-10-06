@@ -77,6 +77,15 @@ pub struct Strings {
     pub in_screen: &'static str,        // "{action} (full-screen view)" — panel/menu/desktop clicks
     pub element_generic: &'static str,  // fallback element word
 
+    // Keyboard steps (the typed text itself is never recorded).
+    pub key_typed: &'static str,    // "Typed text"
+    pub key_password: &'static str, // "Entered a password"
+    pub key_pressed: &'static str,  // "Pressed {keys}"
+    pub key_in: &'static str,       // "{action} in {element}"
+    pub key_then: &'static str,     // "{action}, then pressed {keys}"
+    pub key_ctrl: &'static str,     // modifier name on the keycap ("Ctrl" / "Strg")
+    pub key_shift: &'static str,    // modifier name on the keycap ("Shift")
+
     // Tray.
     pub tray_ready: &'static str,
     pub tray_recording: &'static str, // "● Recording — {n} step(s)"
@@ -88,6 +97,7 @@ pub struct Strings {
     pub menu_stop: &'static str,
     pub menu_pause: &'static str,
     pub menu_resume: &'static str,
+    pub menu_keyboard: &'static str, // checkbox: record keyboard input
     pub menu_open_folder: &'static str,
     pub menu_edit_last: &'static str,
     pub menu_quit: &'static str,

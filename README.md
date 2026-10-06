@@ -32,6 +32,9 @@ It lives in the system tray; you start and stop recording from there.
 - **Smart steps**: double clicks merge into one step, drag & drop becomes a
   single step with an arrow, and each step names the app (process) as well as
   the window. **Pause/resume** from the tray; pick which mouse buttons record.
+- **Keyboard steps** (opt-in): “Typed text in text field ‘Search’, then pressed
+  Enter”, “Pressed Ctrl+S” — what was typed is **never** recorded, only that and
+  where; password fields get a step without a screenshot (see below).
 - **Editing & redaction** after the fact in a local in-browser editor — blur
   sensitive areas, reword, delete, reorder or add steps (see below).
 - **Notifications** on start/stop, **incremental report** (a crash/kill loses nothing),
@@ -46,6 +49,7 @@ It lives in the system tray; you start and stop recording from there.
 |---------|-------------|
 | Screenshot authorization | a `.desktop` file with `X-KDE-DBUS-Restricted-Interfaces=org.kde.KWin.ScreenShot2` (created by `install.sh`) |
 | Click capture | user in the `input` group — `sudo usermod -aG input "$USER"`, then **reboot** (see note below) |
+| Keyboard steps (optional) | the same `input` group; `libxkbcommon` (part of every Wayland desktop) for layout-correct shortcut names |
 | Element detection (Qt/KDE) | **qtbase built with the `accessibility` USE flag** (Gentoo) / the Qt AT-SPI bridge |
 | Element detection (GTK) | `at-spi2-atk` / `libatk-bridge` (usually present) |
 | Element detection (Firefox) | activates automatically once an AT is detected |
@@ -82,6 +86,8 @@ STEPSHOT_DEBUG=1   stepshot   # extra diagnostics on stderr
 STEPSHOT_ICON=1    stepshot   # render the tray icon to /tmp for inspection
 STEPSHOT_ATTREE=3  stepshot   # dump the AT-SPI tree (to the given depth)
 STEPSHOT_ATDUMP=1  stepshot   # find the first named button and resolve it back
+STEPSHOT_FOCUS=1   stepshot   # print the focused element a few times
+STEPSHOT_KEYS=1    stepshot   # show how key presses are classified (20 s)
 ```
 
 `stepshot --help` / `--version` work as expected.
@@ -141,10 +147,37 @@ stepshot --write-config   # → ~/.config/stepshot/config.toml (never overwrites
 [capture]               # click handling
 # buttons = ["left", "right", "middle"]   # which buttons record (default: all)
 # double_click_ms = 400 # merge two rapid same-button clicks into one step (0 = off)
+# drag_min_px = 16      # movement that turns a press into a drag-and-drop step (0 = off)
+# keyboard = false      # record keyboard steps (also a checkbox in the tray menu)
+# typing_idle_ms = 1500 # a text entry ends after this long without typing
 ```
 
 Colors are `"#RRGGBB"`, alpha is `0.0`–`1.0`. A missing or malformed file falls
 back to the built-in defaults (with a warning), never blocking startup.
+
+## Keyboard steps
+
+Off by default — switch them on with **“Record keyboard input”** in the tray menu
+or `keyboard = true` under `[capture]`. stepshot then records *that* and *where*
+something was typed, never *what*:
+
+- **Typing** becomes one step per text entry, named after the focused field
+  (via AT-SPI) — “Typed text in text field ‘Search’”. An entry ends after a short
+  pause, a click, or Enter/Tab (“…, then pressed Enter”); its screenshot shows
+  the result.
+- **Shortcuts and special keys** — anything with Ctrl/Alt/Super, plus Enter,
+  Tab, Esc, F-keys and Delete — become their own step: “Pressed Ctrl+S”. Names
+  follow your keyboard layout (read from KDE, or `XKB_DEFAULT_*`).
+- **Password fields** get a step (“Entered a password”) but **no screenshot**.
+
+The input reader never passes typed characters on: ordinary typing leaves it as
+a content-free “something was typed” tick, and while you're not recording (or
+paused, or the toggle is off) nothing leaves it at all. Keyboards are only
+opened once keyboard steps are first switched on. Screenshots can of course show
+text you typed — redact it in the editor before sharing (the typed-into field is
+one click away via “Redact clicked element”).
+
+`STEPSHOT_KEYS=1 stepshot` shows for 20 s how your key presses are classified.
 
 ## How authorization works (KDE)
 
@@ -192,11 +225,13 @@ builds you trust, and remove the `.desktop` file to revoke screenshot access.
 src/
   main.rs     startup + tray event loop (start/stop/quit), wiring
   session.rs  recording session: per-click capture step + final report
-  selftest.rs env-driven debug/self-test modes (ONESHOT, ICON, ATTREE, ATDUMP)
+  selftest.rs env-driven debug/self-test modes (ONESHOT, ICON, ATTREE, ATDUMP, FOCUS, KEYS)
   tray.rs     tray icon/menu (ksni, StatusNotifierItem)
   icon.rs     camera icon drawn programmatically (red dot when active)
   notify.rs   desktop notifications (start/stop)
   input.rs    ClickSource trait    → EvdevClickSource (Linux)        [Win: LL mouse hook]
+  keys.rs     opt-in keyboard reader: content-free typing ticks + shortcut presses
+  keymap.rs   shortcut labels in the user's layout (libxkbcommon, KDE kxkbrc)
   capture.rs  WindowCapturer trait → KdeCapturer (KWin ScreenShot2)  [Win: PrintWindow]
   cursor.rs   KwinCursor: global cursor pos via a KWin script → zbus sink
   a11y.rs     Atspi: GetAccessibleAtPoint over the a11y bus (with deadline) [Win: UIA]
@@ -204,7 +239,7 @@ src/
   i18n.rs     minimal, dependency-free translations (one file per language)
   i18n/       en.rs, de.rs, fr.rs, es.rs, it.rs — string tables (one per language)
   config.rs   ~/.config/stepshot/config.toml (marker, export/capture options)
-  model.rs    Step/Button + description logic
+  model.rs    Step/Button/KeyKind + description logic
   report.rs   HTML + Markdown + dispatch of the final exporters
   export_pdf.rs / export_docx.rs  paginated PDF and Word, screenshots embedded
   export_odt.rs / export_rtf.rs / export_txt.rs  ODT, RTF and plain-text exports
@@ -253,7 +288,7 @@ Milestones 0.1–0.7 (KDE foundation, PDF/DOCX/ODT/RTF/TXT exports, step editing
 - **Windows backend** (milestone 0.3) — drafted on the `feature/windows-backend`
   branch but never tested on Windows; parked until it can be, and behind the
   current `main` (needs a port after the module refactor)
-- **GNOME backend**, **keyboard-step capture** (privacy-first, summarized only)
+- **GNOME backend**
 - **macOS backend** — **help wanted** ([#1](https://github.com/joshii-h/stepshot/issues/1)):
   I don't have a Mac running a current macOS, so this needs an external contributor
 - More languages (PRs welcome — add a file under `src/i18n/`)
