@@ -220,7 +220,7 @@ src/
 
 The platform-specific parts sit behind traits — one backend per OS, while the
 rest (`model`, `report`, `annotate`) stays shared. A Windows backend
-(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is the planned next step.
+(`SetWindowsHookEx` + `PrintWindow` + UI Automation) is drafted but parked (see Roadmap).
 
 ## Languages
 
